@@ -1,4 +1,4 @@
-let token = localStorage.getItem("token") || "";
+let token = sessionStorage.getItem("token") || "";
 let me = null;
 let editingId = null;
 
@@ -48,7 +48,7 @@ async function doLogin() {
     return;
   }
   token = res.token;
-  localStorage.setItem("token", token);
+  sessionStorage.setItem("token", token);
   await bootstrap();
 }
 
@@ -56,7 +56,7 @@ async function bootstrap() {
   const meRes = await api("/api/me");
   if (!meRes.ok) {
     token = "";
-    localStorage.removeItem("token");
+    sessionStorage.removeItem("token");
     setLogin(true);
     return;
   }
@@ -191,7 +191,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("btnLogin").onclick = doLogin;
   $("btnLogout").onclick = () => {
     token = "";
-    localStorage.removeItem("token");
+    sessionStorage.removeItem("token");
     setLogin(true);
     $("meLine").textContent = "Deslogado";
   };
