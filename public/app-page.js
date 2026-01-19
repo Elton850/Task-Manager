@@ -70,6 +70,63 @@ function applyFilters(list) {
   });
 }
 
+function findUser(email) {
+  const e = String(email || "").toLowerCase();
+  return users.find((u) => String(u.email || "").toLowerCase() === e) || null;
+}
+
+/* =========================
+   Competência (mês/ano)
+========================= */
+function setupCompetenciaSelects() {
+  const months = ["01","02","03","04","05","06","07","08","09","10","11","12"];
+  const monthNames = months.map((mm, i) =>
+    new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date(2026, i, 1))
+  );
+
+  const mMes = $("mCompMes");
+  mMes.innerHTML = "";
+  months.forEach((mm, i) => {
+    const o = document.createElement("option");
+    o.value = mm;
+    o.textContent = monthNames[i];
+    mMes.appendChild(o);
+  });
+
+  const yearNow = new Date().getFullYear();
+  const mAno = $("mCompAno");
+  mAno.innerHTML = "";
+  for (let y = yearNow - 2; y <= yearNow + 3; y++) {
+    const o = document.createElement("option");
+    o.value = String(y);
+    o.textContent = String(y);
+    mAno.appendChild(o);
+  }
+}
+
+function setCompetenciaDefaultToday() {
+  const now = new Date();
+  $("mCompMes").value = String(now.getMonth() + 1).padStart(2, "0");
+  $("mCompAno").value = String(now.getFullYear());
+}
+
+function setCompetenciaFromTask(t) {
+  const ym = String(t.competenciaYm || "").trim();
+  if (ym.match(/^\d{4}-\d{2}$/)) {
+    $("mCompAno").value = ym.slice(0, 4);
+    $("mCompMes").value = ym.slice(5, 7);
+    return;
+  }
+  // fallback: se ainda existir competencia antigo "YYYY-MM"
+  const old = String(t.competencia || "").trim();
+  if (old.match(/^\d{4}-\d{2}$/)) {
+    $("mCompAno").value = old.slice(0, 4);
+    $("mCompMes").value = old.slice(5, 7);
+  } else {
+    setCompetenciaDefaultToday();
+  }
+}
+
 /* =========================
    Bootstrap
 ========================= */
@@ -79,10 +136,7 @@ async function bootstrap() {
   me = meRes.user;
 
   $("meLine").textContent = `${me.nome || me.email} • ${me.role} • Área: ${me.area || "-"}`;
-  $("btnLogout").onclick = (e) => {
-    e.preventDefault();
-    logout();
-  };
+  $("btnLogout").onclick = (e) => { e.preventDefault(); logout(); };
 
   if (me.role === "ADMIN") {
     const a = document.getElementById("adminLink");
@@ -92,22 +146,28 @@ async function bootstrap() {
   }
 
   const [lres, ures] = await Promise.all([api("/api/lookups"), api("/api/users")]);
-  lookups = lres && lres.ok && lres.lookups ? lres.lookups : {};
-  users = ures && ures.ok && ures.users ? ures.users : [];
+  lookups = (lres && lres.ok && lres.lookups) ? lres.lookups : {};
+  users = (ures && ures.ok && ures.users) ? ures.users : [];
 
-  // filtros: default = hoje
+  // Filtros: default = HOJE (prazo)
   const today = new Date();
   $("fFrom").value = today.toISOString().slice(0, 10);
   $("fTo").value = today.toISOString().slice(0, 10);
 
   fillSelect($("fStatus"), lookups.STATUS || [], { empty: "Todos" });
 
-  // modal selects
-  fillSelect($("mCompetencia"), lookups.COMPETENCIA || [], { empty: "—" });
+  // selects do modal
+  setupCompetenciaSelects();
   fillSelect($("mRecorrencia"), lookups.RECORRENCIA || []);
   fillSelect($("mTipo"), lookups.TIPO || []);
   fillSelect($("mStatus"), lookups.STATUS || []);
   fillUsers($("mResp"), users);
+
+  // ao trocar responsável, ajustar área automaticamente (se você quiser que área acompanhe)
+  $("mResp").onchange = () => {
+    const u = findUser($("mResp").value);
+    if (u && $("mAreaHidden")) $("mAreaHidden").value = u.area || "";
+  };
 
   // eventos
   $("btnNew").onclick = () => openModalNew();
@@ -180,7 +240,7 @@ function renderTable(list) {
   (list || []).forEach((t) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${fmtCompetencia(t.competencia)}</td>
+      <td>${compLabel(t.competenciaYm || t.competencia)}</td>
       <td>${t.recorrencia || ""}</td>
       <td>${t.tipo || ""}</td>
       <td>${t.atividade || ""}</td>
@@ -236,7 +296,8 @@ function openModalNew() {
   $("mTitle").textContent = "Nova task";
   $("mHint").textContent = "";
 
-  $("mCompetencia").value = "";
+  setCompetenciaDefaultToday();
+
   $("mRecorrencia").value = (lookups.RECORRENCIA || [])[0] || "";
   $("mTipo").value = (lookups.TIPO || [])[0] || "";
   $("mStatus").value = (lookups.STATUS || [])[0] || "";
@@ -245,11 +306,10 @@ function openModalNew() {
   $("mResp").value = found ? found.email : users[0]?.email || "";
 
   $("mAtividade").value = "";
-  $("mPrazo").value = ""; // input date
-  $("mRealizado").value = ""; // datetime-local (mantemos ISO no backend)
+  $("mPrazo").value = "";
+  $("mRealizado").value = "";
   $("mObs").value = "";
 
-  // regra: USER não edita prazo
   $("mPrazo").disabled = me.role === "USER";
 
   $("modal").classList.add("show");
@@ -263,7 +323,8 @@ function openModalEdit(id) {
   $("mTitle").textContent = "Editar task";
   $("mHint").textContent = "";
 
-  $("mCompetencia").value = t.competencia || "";
+  setCompetenciaFromTask(t);
+
   $("mRecorrencia").value = t.recorrencia || "";
   $("mTipo").value = t.tipo || "";
   $("mStatus").value = t.status || "";
@@ -286,8 +347,10 @@ function closeModal() {
 async function saveTask() {
   $("mHint").textContent = "Salvando...";
 
+  const competenciaYm = `${$("mCompAno").value}-${$("mCompMes").value}`;
+
   const payload = {
-    competencia: $("mCompetencia").value || "",
+    competenciaYm,
     recorrencia: $("mRecorrencia").value || "",
     tipo: $("mTipo").value || "",
     status: $("mStatus").value || "",
@@ -299,10 +362,7 @@ async function saveTask() {
   };
 
   const res = editingId
-    ? await api(`/api/tasks/${editingId}`, {
-        method: "PUT",
-        body: JSON.stringify(payload),
-      })
+    ? await api(`/api/tasks/${editingId}`, { method: "PUT", body: JSON.stringify(payload) })
     : await api(`/api/tasks`, { method: "POST", body: JSON.stringify(payload) });
 
   if (!res.ok) {

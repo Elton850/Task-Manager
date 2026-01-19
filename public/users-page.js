@@ -4,8 +4,24 @@ let editing = null;
 
 const $ = (id) => document.getElementById(id);
 
-function openModal(v){ $("modal").classList.toggle("show", !!v); }
-function boolVal(v){ return String(v) === "true"; }
+function openModal(v) { $("modal").classList.toggle("show", !!v); }
+function boolVal(v) { return String(v) === "true"; }
+
+function fillSelect(el, items, { empty = null } = {}) {
+  el.innerHTML = "";
+  if (empty !== null) {
+    const o = document.createElement("option");
+    o.value = "";
+    o.textContent = empty;
+    el.appendChild(o);
+  }
+  (items || []).forEach((v) => {
+    const o = document.createElement("option");
+    o.value = v;
+    o.textContent = v;
+    el.appendChild(o);
+  });
+}
 
 async function bootstrap() {
   const meRes = await api("/api/me");
@@ -14,17 +30,22 @@ async function bootstrap() {
   if (me.role !== "ADMIN") return logout();
 
   $("meLine").textContent = `${me.nome || me.email} • ADMIN`;
-  $("btnLogout").onclick = (e)=>{ e.preventDefault(); logout(); };
+  $("btnLogout").onclick = (e) => { e.preventDefault(); logout(); };
 
   $("btnNew").onclick = () => edit(null);
   $("mClose").onclick = () => openModal(false);
   $("mCancel").onclick = () => openModal(false);
   $("mSave").onclick = save;
 
+  // carrega lookups para AREA
+  const lr = await api("/api/lookups");
+  const areas = (lr.ok && lr.lookups && lr.lookups.AREA) ? lr.lookups.AREA : [];
+  fillSelect($("mArea"), areas, { empty: "—" });
+
   await load();
 }
 
-async function load(){
+async function load() {
   $("hint").textContent = "Carregando...";
   const res = await api("/api/admin/users");
   if (!res.ok) { $("hint").textContent = res.error || "Erro"; return; }
@@ -33,11 +54,11 @@ async function load(){
   $("hint").textContent = `Usuários: ${users.length}`;
 }
 
-function render(){
+function render() {
   const tb = $("tb");
   tb.innerHTML = "";
 
-  users.forEach(u => {
+  users.forEach((u) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${u.email}</td>
@@ -63,8 +84,8 @@ function render(){
     b2.textContent = u.active ? "Inativar" : "Ativar";
     b2.onclick = async () => {
       const r = await api(`/api/admin/users/${encodeURIComponent(u.email)}/active`, {
-        method:"POST",
-        body: JSON.stringify({ active: !u.active })
+        method: "POST",
+        body: JSON.stringify({ active: !u.active }),
       });
       if (!r.ok) alert(r.error || "Erro");
       else load();
@@ -77,7 +98,7 @@ function render(){
   });
 }
 
-function edit(u){
+function edit(u) {
   editing = u ? u.email : null;
   $("mTitle").textContent = u ? "Editar usuário" : "Novo usuário";
   $("mHint").textContent = "";
@@ -87,7 +108,10 @@ function edit(u){
 
   $("mNome").value = u ? (u.nome || "") : "";
   $("mRole").value = u ? u.role : "USER";
-  $("mArea").value = u ? (u.area || "") : "";
+
+  // se não existir área no lookup, deixa em branco
+  $("mArea").value = u ? (u.area || "") : ($("mArea").options[0]?.value || "");
+
   $("mActive").value = u ? String(!!u.active) : "true";
   $("mCanDelete").value = u ? String(!!u.canDelete) : "false";
   $("mPass").value = "";
@@ -95,14 +119,14 @@ function edit(u){
   openModal(true);
 }
 
-async function save(){
+async function save() {
   $("mHint").textContent = "Salvando...";
 
   const payload = {
     email: $("mEmail").value.trim().toLowerCase(),
     nome: $("mNome").value.trim(),
     role: $("mRole").value,
-    area: $("mArea").value.trim(),
+    area: $("mArea").value || "",
     active: boolVal($("mActive").value),
     canDelete: boolVal($("mCanDelete").value),
   };
@@ -112,8 +136,8 @@ async function save(){
   if (password) payload.password = password;
 
   const res = editing
-    ? await api(`/api/admin/users/${encodeURIComponent(editing)}`, { method:"PUT", body: JSON.stringify(payload) })
-    : await api(`/api/admin/users`, { method:"POST", body: JSON.stringify(payload) });
+    ? await api(`/api/admin/users/${encodeURIComponent(editing)}`, { method: "PUT", body: JSON.stringify(payload) })
+    : await api(`/api/admin/users`, { method: "POST", body: JSON.stringify(payload) });
 
   if (!res.ok) { $("mHint").textContent = res.error || "Erro"; return; }
   openModal(false);
