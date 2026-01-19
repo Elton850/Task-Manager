@@ -23,6 +23,11 @@ export const sheets = {
     return data.user;
   },
 
+  async listUsers() {
+    const data = await callSheets<{ ok: true; users: any[] }>("users.list");
+    return data.users;
+  },
+
   async listTasks() {
     const data = await callSheets<{ ok: true; tasks: any[] }>("tasks.list");
     return data.tasks;

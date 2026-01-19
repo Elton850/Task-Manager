@@ -13,7 +13,11 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: "1mb" }));
 
 // Front (B)
-app.use("/", express.static(path.join(process.cwd(), "public")));
+app.use("/public", express.static(path.join(process.cwd(), "public")));
+
+app.get("/", (_, res) => res.sendFile(path.join(process.cwd(), "public/login.html")));
+app.get("/app", (_, res) => res.sendFile(path.join(process.cwd(), "public/app.html")));
+app.get("/admin", (_, res) => res.sendFile(path.join(process.cwd(), "public/admin.html")));
 
 function authMiddleware(req: any, res: any, next: any) {
   try {
@@ -40,6 +44,33 @@ app.post("/api/auth/login", async (req, res) => {
 
 app.get("/api/me", authMiddleware, async (req: any, res) => {
   res.json({ ok: true, user: req.user as AuthedUser });
+});
+
+app.get("/api/users", authMiddleware, async (req: any, res) => {
+  const me = req.user as AuthedUser;
+
+  const all = await sheets.listUsers();
+  const active = all.filter(u => String(u.active).toUpperCase() === "TRUE");
+
+  let visible = active;
+
+  if (me.role === "LEADER") {
+    visible = active.filter(u => String(u.area || "") === String(me.area || ""));
+  }
+
+  if (me.role === "USER") {
+    visible = active.filter(u => String(u.email || "").toLowerCase() === me.email.toLowerCase());
+  }
+
+  // não expor passwordHash
+  const safe = visible.map(u => ({
+    email: String(u.email || "").toLowerCase(),
+    nome: String(u.nome || ""),
+    role: String(u.role || "USER").toUpperCase(),
+    area: String(u.area || ""),
+  }));
+
+  res.json({ ok: true, users: safe });
 });
 
 app.get("/api/lookups", authMiddleware, async (req: any, res) => {
