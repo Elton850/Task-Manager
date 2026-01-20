@@ -3,6 +3,7 @@ let lookups = {};
 let users = [];
 let tasks = [];
 let editingId = null;
+let modalMode = "EDIT"; // EDIT | VIEW | USER_OBS
 
 const $ = (id) => document.getElementById(id);
 
@@ -107,9 +108,7 @@ function setCompetenciaFromTask(t) {
   if (ym.match(/^\d{4}-\d{1,2}$/)) {
     $("mCompAno").value = ym.slice(0, 4);
     $("mCompMes").value = String(Number(ym.slice(5))).padStart(2, "0");
-  } else {
-    setCompetenciaDefaultToday();
-  }
+  } else setCompetenciaDefaultToday();
 }
 
 /* Optimistic helpers */
@@ -154,14 +153,12 @@ async function bootstrap() {
   lookups = (lres && lres.ok && lres.lookups) ? lres.lookups : {};
   users = (ures && ures.ok && ures.users) ? ures.users : [];
 
-  // filtros default = hoje
   const today = new Date();
   $("fFrom").value = today.toISOString().slice(0, 10);
   $("fTo").value = today.toISOString().slice(0, 10);
 
   fillSelect($("fStatus"), lookups.STATUS || [], { empty: "Todos" });
 
-  // filtro responsável (LEADER/ADMIN)
   if ($("fResp")) {
     if (me.role === "USER") {
       $("fResp").style.display = "none";
@@ -170,14 +167,12 @@ async function bootstrap() {
     }
   }
 
-  // modal selects
   setupCompetenciaSelects();
   fillSelect($("mRecorrencia"), lookups.RECORRENCIA || []);
   fillSelect($("mTipo"), lookups.TIPO || []);
   fillSelect($("mStatus"), lookups.STATUS || []);
   fillUsersSelect($("mResp"), users);
 
-  // eventos
   $("btnNew").onclick = () => openModalNew();
   $("btnRefresh").onclick = () => loadTasks();
   $("btnFilter").onclick = () => renderFromLocal();
@@ -195,7 +190,6 @@ async function loadTasks() {
   $("hint").textContent = "Carregando...";
   const res = await api("/api/tasks");
   if (!res.ok) { $("hint").textContent = res.error || "Erro"; return; }
-
   tasks = res.tasks || [];
   renderFromLocal();
 }
@@ -224,6 +218,17 @@ function renderKPIs(list) {
   $("kLate").textContent = late;
 }
 
+function displayResponsavel(t) {
+  const nome = String(t.responsavelNome || "").trim();
+  if (nome) return nome;
+
+  const email = String(t.responsavelEmail || "").toLowerCase();
+  if (me && me.role === "USER" && email === String(me.email || "").toLowerCase()) {
+    return me.nome || me.email;
+  }
+  return t.responsavelEmail || "";
+}
+
 function renderTable(list) {
   const tb = $("tb");
   tb.innerHTML = "";
@@ -235,7 +240,7 @@ function renderTable(list) {
       <td>${t.recorrencia || ""}</td>
       <td>${t.tipo || ""}</td>
       <td>${t.atividade || ""}</td>
-      <td>${t.responsavelNome || t.responsavelEmail || ""}</td>
+      <td>${displayResponsavel(t)}</td>
       <td>${fmtDateBR(t.prazo)}</td>
       <td>${t.realizado ? fmtDateBR(t.realizado) : ""}</td>
       <td><span class="pill ${pillClass(t.status)}">${t.status || ""}</span></td>
@@ -246,7 +251,6 @@ function renderTable(list) {
     const row = document.createElement("div");
     row.className = "rowActions";
 
-    // concluir / reabrir
     const bDone = document.createElement("button");
     bDone.className = "sm";
     bDone.title = isDoneTask(t) ? "Reabrir" : "Concluir";
@@ -257,9 +261,9 @@ function renderTable(list) {
     if (me.role === "USER") {
       const bView = document.createElement("button");
       bView.className = "sm";
-      bView.title = "Visualizar";
+      bView.title = "Ver / Observações";
       bView.textContent = "👁";
-      bView.onclick = () => openModalView(t.id);
+      bView.onclick = () => openModalUserObs(t.id);
       row.appendChild(bView);
 
       td.appendChild(row);
@@ -307,23 +311,18 @@ function renderTable(list) {
 async function toggleDone(t) {
   const done = isDoneTask(t);
   const patch = done
-    ? { status: "Em Andamento", realizado: "CLEAR" } // limpa realizado
+    ? { status: "Em Andamento", realizado: "CLEAR" }
     : { status: "Concluído", realizado: new Date().toISOString() };
 
-  // otimista
   const before = { ...t };
-  if (done) {
-    t.status = "Em Andamento";
-    t.realizado = "";
-  } else {
-    t.status = "Concluído";
-    t.realizado = patch.realizado;
-  }
+
+  if (done) { t.status = "Em Andamento"; t.realizado = ""; }
+  else { t.status = "Concluído"; t.realizado = patch.realizado; }
+
   renderFromLocal();
 
   const r = await api(`/api/tasks/${t.id}`, { method: "PUT", body: JSON.stringify(patch) });
   if (!r.ok) {
-    // rollback
     upsertLocalTask(before);
     renderFromLocal();
     return alert(r.error || "Erro");
@@ -332,7 +331,38 @@ async function toggleDone(t) {
   renderFromLocal();
 }
 
-/* modal */
+/* modal modes */
+function setModalMode(mode) {
+  modalMode = mode;
+
+  const all = ["mCompMes","mCompAno","mRecorrencia","mTipo","mStatus","mResp","mAtividade","mPrazo","mRealizado","mObs"];
+  all.forEach((id) => { const el = document.getElementById(id); if (el) el.disabled = true; });
+
+  // botões
+  const save = document.getElementById("mSave");
+  const clear = document.getElementById("mClearReal");
+  if (clear) clear.style.display = "none";
+
+  if (mode === "EDIT") {
+    all.forEach((id) => { const el = document.getElementById(id); if (el) el.disabled = false; });
+    if (save) save.style.display = "inline-block";
+    if (clear) clear.style.display = "inline-block";
+    return;
+  }
+
+  if (mode === "VIEW") {
+    if (save) save.style.display = "none";
+    return;
+  }
+
+  // USER_OBS: só Observações editável
+  if (mode === "USER_OBS") {
+    const obs = document.getElementById("mObs");
+    if (obs) obs.disabled = false;
+    if (save) save.style.display = "inline-block";
+  }
+}
+
 function openModalNew() {
   if (me.role === "USER") return;
 
@@ -353,7 +383,7 @@ function openModalNew() {
   $("mRealizado").value = "";
   $("mObs").value = "";
 
-  setModalEditable(true);
+  setModalMode("EDIT");
   $("modal").classList.add("show");
 }
 
@@ -379,17 +409,17 @@ function openModalEdit(id) {
   $("mRealizado").value = t.realizado ? isoToInputDT(t.realizado) : "";
   $("mObs").value = t.observacoes || "";
 
-  setModalEditable(true);
+  setModalMode("EDIT");
   $("modal").classList.add("show");
 }
 
-function openModalView(id) {
+function openModalUserObs(id) {
   const t = tasks.find((x) => x.id === id);
   if (!t) return;
 
-  editingId = null;
-  $("mTitle").textContent = "Visualizar task";
-  $("mHint").textContent = "";
+  editingId = id; // precisa do id para salvar obs
+  $("mTitle").textContent = "Observações";
+  $("mHint").textContent = "Você pode editar apenas Observações.";
 
   setCompetenciaFromTask(t);
 
@@ -403,30 +433,34 @@ function openModalView(id) {
   $("mRealizado").value = t.realizado ? isoToInputDT(t.realizado) : "";
   $("mObs").value = t.observacoes || "";
 
-  setModalEditable(false);
+  setModalMode("USER_OBS");
   $("modal").classList.add("show");
-}
-
-function setModalEditable(on) {
-  const ids = ["mCompMes","mCompAno","mRecorrencia","mTipo","mStatus","mResp","mAtividade","mPrazo","mRealizado","mObs"];
-  ids.forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.disabled = !on;
-  });
-  const save = document.getElementById("mSave");
-  const clear = document.getElementById("mClearReal");
-  if (save) save.style.display = on ? "inline-block" : "none";
-  if (clear) clear.style.display = on ? "inline-block" : "none";
 }
 
 function closeModal() {
   $("modal").classList.remove("show");
 }
 
+/* save */
 async function saveTask() {
-  if (me.role === "USER") return;
-
   $("mHint").textContent = "Salvando...";
+
+  // USER: salva somente observacoes
+  if (me.role === "USER") {
+    if (!editingId) { $("mHint").textContent = "Task inválida."; return; }
+
+    const payload = { observacoes: ($("mObs").value || "").trim() };
+
+    const res = await api(`/api/tasks/${editingId}`, { method: "PUT", body: JSON.stringify(payload) });
+    if (!res.ok) { $("mHint").textContent = res.error || "Erro"; return; }
+
+    closeModal();
+    if (res.task) upsertLocalTask(res.task);
+    renderFromLocal();
+    return;
+  }
+
+  // LEADER/ADMIN
   const competenciaYm = `${$("mCompAno").value}-${$("mCompMes").value}`;
 
   const payload = {

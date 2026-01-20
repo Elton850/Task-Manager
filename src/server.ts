@@ -46,13 +46,39 @@ async function getUserByEmailSafe(email: string) {
 let tasksCache: { at: number; data: TaskRow[] } | null = null;
 
 async function listTasksCached() {
-  const ttlMs = 8000; // 8s
+  const ttlMs = 8000;
   if (tasksCache && Date.now() - tasksCache.at < ttlMs) return tasksCache.data;
   const data = (await sheets.listTasks()) as TaskRow[];
   tasksCache = { at: Date.now(), data };
   return data;
 }
-function bustTasksCache() { tasksCache = null; }
+function bustTasksCache() {
+  tasksCache = null;
+}
+
+/* ===== Competência: normaliza para AAAA-MM ===== */
+function normYm(input: any): string {
+  const s = String(input || "").trim();
+  if (!s) return "";
+
+  // AAAA-MM-DD -> AAAA-MM
+  let m = s.match(/^(\d{4})-(\d{1,2})-\d{1,2}/);
+  if (m) return `${m[1]}-${String(Number(m[2])).padStart(2, "0")}`;
+
+  // AAAA-M / AAAA-MM
+  m = s.match(/^(\d{4})-(\d{1,2})$/);
+  if (m) return `${m[1]}-${String(Number(m[2])).padStart(2, "0")}`;
+
+  // AAAA/M
+  m = s.match(/^(\d{4})\/(\d{1,2})$/);
+  if (m) return `${m[1]}-${String(Number(m[2])).padStart(2, "0")}`;
+
+  // M/AAAA ou MM/AAAA
+  m = s.match(/^(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[2]}-${String(Number(m[1])).padStart(2, "0")}`;
+
+  return s; // fallback (não quebra)
+}
 
 app.use("/public", express.static(path.join(process.cwd(), "public")));
 
@@ -62,307 +88,390 @@ app.get("/admin", (_, res) => res.sendFile(path.join(process.cwd(), "public/admi
 app.get("/admin/users", (_, res) => res.sendFile(path.join(process.cwd(), "public/users.html")));
 
 /* AUTH */
-app.post("/api/auth/login", a(async (req: any, res: any) => {
-  const email = mustString(req.body.email, "Email");
-  const password = mustString(req.body.password, "Senha");
-  const out = await login(email, password);
-  res.json({ ok: true, ...out });
-}));
+app.post(
+  "/api/auth/login",
+  a(async (req: any, res: any) => {
+    const email = mustString(req.body.email, "Email");
+    const password = mustString(req.body.password, "Senha");
+    const out = await login(email, password);
+    res.json({ ok: true, ...out });
+  })
+);
 
-app.get("/api/me", authMiddleware, a(async (req: any, res: any) => {
-  res.json({ ok: true, user: req.user as AuthedUser });
-}));
+app.get(
+  "/api/me",
+  authMiddleware,
+  a(async (req: any, res: any) => {
+    res.json({ ok: true, user: req.user as AuthedUser });
+  })
+);
 
 /* USERS (VISUALIZAÇÃO) */
-app.get("/api/users", authMiddleware, a(async (req: any, res: any) => {
-  const me = req.user as AuthedUser;
-  const all = await sheets.listUsers();
-  const active = all.filter((u) => String(u.active).toUpperCase() === "TRUE" || u.active === true);
+app.get(
+  "/api/users",
+  authMiddleware,
+  a(async (req: any, res: any) => {
+    const me = req.user as AuthedUser;
+    const all = await sheets.listUsers();
+    const active = all.filter((u) => String(u.active).toUpperCase() === "TRUE" || u.active === true);
 
-  let visible = active;
-  if (me.role === "LEADER") visible = active.filter((u) => String(u.area || "") === String(me.area || ""));
-  if (me.role === "USER") visible = active.filter((u) => safeLowerEmail(u.email) === me.email);
+    let visible = active;
+    if (me.role === "LEADER") visible = active.filter((u) => String(u.area || "") === String(me.area || ""));
+    if (me.role === "USER") visible = active.filter((u) => safeLowerEmail(u.email) === me.email);
 
-  res.json({
-    ok: true,
-    users: visible.map((u) => ({
-      email: safeLowerEmail(u.email),
-      nome: String(u.nome || ""),
-      role: String(u.role || "USER").toUpperCase(),
-      area: String(u.area || ""),
-    })),
-  });
-}));
+    res.json({
+      ok: true,
+      users: visible.map((u) => ({
+        email: safeLowerEmail(u.email),
+        nome: String(u.nome || ""),
+        role: String(u.role || "USER").toUpperCase(),
+        area: String(u.area || ""),
+      })),
+    });
+  })
+);
 
 /* ADMIN - USERS */
-app.get("/api/admin/users", authMiddleware, a(async (req: any, res: any) => {
-  const me = req.user as AuthedUser;
-  if (me.role !== "ADMIN") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+app.get(
+  "/api/admin/users",
+  authMiddleware,
+  a(async (req: any, res: any) => {
+    const me = req.user as AuthedUser;
+    if (me.role !== "ADMIN") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
 
-  const all = await sheets.listUsers();
-  res.json({
-    ok: true,
-    users: all.map((u) => ({
-      email: safeLowerEmail(u.email),
-      nome: String(u.nome || ""),
-      role: String(u.role || "USER").toUpperCase(),
-      area: String(u.area || ""),
-      active: String(u.active).toUpperCase() === "TRUE" || u.active === true,
-      canDelete: String(u.canDelete).toUpperCase() === "TRUE" || u.canDelete === true,
-    })),
-  });
-}));
+    const all = await sheets.listUsers();
+    res.json({
+      ok: true,
+      users: all.map((u) => ({
+        email: safeLowerEmail(u.email),
+        nome: String(u.nome || ""),
+        role: String(u.role || "USER").toUpperCase(),
+        area: String(u.area || ""),
+        active: String(u.active).toUpperCase() === "TRUE" || u.active === true,
+        canDelete: String(u.canDelete).toUpperCase() === "TRUE" || u.canDelete === true,
+      })),
+    });
+  })
+);
 
-app.post("/api/admin/users", authMiddleware, a(async (req: any, res: any) => {
-  const me = req.user as AuthedUser;
-  if (me.role !== "ADMIN") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+app.post(
+  "/api/admin/users",
+  authMiddleware,
+  a(async (req: any, res: any) => {
+    const me = req.user as AuthedUser;
+    if (me.role !== "ADMIN") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
 
-  const email = mustString(req.body.email, "Email").toLowerCase();
-  const password = mustString(req.body.password, "Senha");
-  const passwordHash = await bcrypt.hash(password, 12);
+    const email = mustString(req.body.email, "Email").toLowerCase();
+    const password = mustString(req.body.password, "Senha");
+    const passwordHash = await bcrypt.hash(password, 12);
 
-  const user = await sheets.userUpsert({
-    email,
-    nome: req.body.nome || "",
-    role: String(req.body.role || "USER").toUpperCase(),
-    area: req.body.area || "",
-    active: req.body.active ?? true,
-    canDelete: req.body.canDelete ?? false,
-    passwordHash,
-  }, me.email);
+    const user = await sheets.userUpsert(
+      {
+        email,
+        nome: req.body.nome || "",
+        role: String(req.body.role || "USER").toUpperCase(),
+        area: req.body.area || "",
+        active: req.body.active ?? true,
+        canDelete: req.body.canDelete ?? false,
+        passwordHash,
+      },
+      me.email
+    );
 
-  res.json({ ok: true, user });
-}));
+    res.json({ ok: true, user });
+  })
+);
 
-app.put("/api/admin/users/:email", authMiddleware, a(async (req: any, res: any) => {
-  const me = req.user as AuthedUser;
-  if (me.role !== "ADMIN") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+app.put(
+  "/api/admin/users/:email",
+  authMiddleware,
+  a(async (req: any, res: any) => {
+    const me = req.user as AuthedUser;
+    if (me.role !== "ADMIN") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
 
-  const email = mustString(req.params.email, "Email").toLowerCase();
-  const patch: any = { email, nome: req.body.nome, role: req.body.role, area: req.body.area, active: req.body.active, canDelete: req.body.canDelete };
-  if (req.body.password) patch.passwordHash = await bcrypt.hash(String(req.body.password), 12);
+    const email = mustString(req.params.email, "Email").toLowerCase();
+    const patch: any = {
+      email,
+      nome: req.body.nome,
+      role: req.body.role,
+      area: req.body.area,
+      active: req.body.active,
+      canDelete: req.body.canDelete,
+    };
 
-  const user = await sheets.userUpsert(patch, me.email);
-  res.json({ ok: true, user });
-}));
+    if (req.body.password) patch.passwordHash = await bcrypt.hash(String(req.body.password), 12);
 
-app.post("/api/admin/users/:email/active", authMiddleware, a(async (req: any, res: any) => {
-  const me = req.user as AuthedUser;
-  if (me.role !== "ADMIN") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    const user = await sheets.userUpsert(patch, me.email);
+    res.json({ ok: true, user });
+  })
+);
 
-  const email = mustString(req.params.email, "Email").toLowerCase();
-  const active = !!req.body.active;
+app.post(
+  "/api/admin/users/:email/active",
+  authMiddleware,
+  a(async (req: any, res: any) => {
+    const me = req.user as AuthedUser;
+    if (me.role !== "ADMIN") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
 
-  const user = await sheets.userSetActive(email, active, me.email);
-  res.json({ ok: true, user });
-}));
+    const email = mustString(req.params.email, "Email").toLowerCase();
+    const active = !!req.body.active;
+
+    const user = await sheets.userSetActive(email, active, me.email);
+    res.json({ ok: true, user });
+  })
+);
 
 /* LOOKUPS */
-app.get("/api/lookups", authMiddleware, a(async (_req: any, res: any) => {
-  const lookups = await sheets.listLookups();
-  res.json({ ok: true, lookups });
-}));
+app.get(
+  "/api/lookups",
+  authMiddleware,
+  a(async (_req: any, res: any) => {
+    const lookups = await sheets.listLookups();
+    res.json({ ok: true, lookups });
+  })
+);
 
-app.post("/api/lookups", authMiddleware, a(async (req: any, res: any) => {
-  const me = req.user as AuthedUser;
-  if (me.role !== "ADMIN") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+app.post(
+  "/api/lookups",
+  authMiddleware,
+  a(async (req: any, res: any) => {
+    const me = req.user as AuthedUser;
+    if (me.role !== "ADMIN") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
 
-  const lookups = await sheets.upsertLookup({
-    category: mustString(req.body.category, "Categoria").toUpperCase(),
-    value: mustString(req.body.value, "Valor"),
-    order: Number(req.body.order ?? 9999),
-  });
+    const lookups = await sheets.upsertLookup({
+      category: mustString(req.body.category, "Categoria").toUpperCase(),
+      value: mustString(req.body.value, "Valor"),
+      order: Number(req.body.order ?? 9999),
+    });
 
-  res.json({ ok: true, lookups });
-}));
+    res.json({ ok: true, lookups });
+  })
+);
 
-app.put("/api/lookups/rename", authMiddleware, a(async (req: any, res: any) => {
-  const me = req.user as AuthedUser;
-  if (me.role !== "ADMIN") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+app.put(
+  "/api/lookups/rename",
+  authMiddleware,
+  a(async (req: any, res: any) => {
+    const me = req.user as AuthedUser;
+    if (me.role !== "ADMIN") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
 
-  const lookups = await sheets.lookupRename(
-    mustString(req.body.category, "Categoria").toUpperCase(),
-    mustString(req.body.oldValue, "Valor antigo"),
-    mustString(req.body.newValue, "Novo valor"),
-    me.email
-  );
-  res.json({ ok: true, lookups });
-}));
+    const lookups = await sheets.lookupRename(
+      mustString(req.body.category, "Categoria").toUpperCase(),
+      mustString(req.body.oldValue, "Valor antigo"),
+      mustString(req.body.newValue, "Novo valor"),
+      me.email
+    );
+    res.json({ ok: true, lookups });
+  })
+);
 
 /* TASKS */
-app.get("/api/tasks", authMiddleware, a(async (req: any, res: any) => {
-  const me = req.user as AuthedUser;
-  const all = await listTasksCached();
+app.get(
+  "/api/tasks",
+  authMiddleware,
+  a(async (req: any, res: any) => {
+    const me = req.user as AuthedUser;
+    const all = await listTasksCached();
 
-  const visible = all.filter((t) => {
-    if (me.role === "ADMIN") return true;
-    if (me.role === "LEADER") return String(t.area || "") === String(me.area || "");
-    return safeLowerEmail(t.responsavelEmail) === me.email;
-  });
+    const visible = all.filter((t) => {
+      if (me.role === "ADMIN") return true;
+      if (me.role === "LEADER") return String(t.area || "") === String(me.area || "");
+      return safeLowerEmail(t.responsavelEmail) === me.email;
+    });
 
-  res.json({ ok: true, tasks: visible });
-}));
+    res.json({ ok: true, tasks: visible });
+  })
+);
 
-app.post("/api/tasks", authMiddleware, a(async (req: any, res: any) => {
-  const me = req.user as AuthedUser;
-  const now = nowIso();
+app.post(
+  "/api/tasks",
+  authMiddleware,
+  a(async (req: any, res: any) => {
+    const me = req.user as AuthedUser;
+    const now = nowIso();
 
-  let responsavelEmail = me.email;
-  if ((me.role === "ADMIN" || me.role === "LEADER") && req.body.responsavelEmail) {
-    responsavelEmail = safeLowerEmail(req.body.responsavelEmail);
-  }
-
-  const u = await getUserByEmailSafe(responsavelEmail);
-  const area = u?.area ? String(u.area) : String(me.area || "");
-  if (me.role === "LEADER" && area !== String(me.area || "")) {
-    return res.status(403).json({ ok: false, error: "Leader não pode criar tarefa fora da sua área." });
-  }
-
-  const competenciaYm = String(req.body.competenciaYm || "").trim();
-
-  const task: any = {
-    competenciaYm,
-    competencia: competenciaYm,
-    recorrencia: req.body.recorrencia || "",
-    tipo: req.body.tipo || "",
-    atividade: mustString(req.body.atividade, "Atividade"),
-    responsavelEmail,
-    responsavelNome: String(u?.nome || ""),
-    area,
-    prazo: req.body.prazo || "",
-    realizado: req.body.realizado || "",
-    status: req.body.status || "",
-    observacoes: req.body.observacoes || "",
-    createdAt: now,
-    createdBy: me.email,
-    updatedAt: now,
-    updatedBy: me.email,
-    deletedAt: "",
-    deletedBy: "",
-  };
-
-  const created = await sheets.createTask(task);
-  bustTasksCache();
-  res.json({ ok: true, task: created });
-}));
-
-app.post("/api/tasks/:id/duplicate", authMiddleware, a(async (req: any, res: any) => {
-  const me = req.user as AuthedUser;
-  if (me.role === "USER") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
-
-  const id = mustString(req.params.id, "id");
-  const all = await listTasksCached();
-  const cur = all.find((t) => t.id === id);
-  if (!cur) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
-
-  if (me.role === "LEADER" && String(cur.area || "") !== String(me.area || "")) {
-    return res.status(403).json({ ok: false, error: "FORBIDDEN" });
-  }
-
-  const newEmail = safeLowerEmail(cur.responsavelEmail);
-  const u = await getUserByEmailSafe(newEmail);
-
-  const now = nowIso();
-  const copy: any = {
-    competenciaYm: cur.competenciaYm || cur.competencia || "",
-    competencia: cur.competenciaYm || cur.competencia || "",
-    recorrencia: cur.recorrencia || "",
-    tipo: cur.tipo || "",
-    atividade: cur.atividade || "",
-    responsavelEmail: newEmail,
-    responsavelNome: String(u?.nome || cur.responsavelNome || ""),
-    area: String(u?.area || cur.area || me.area || ""),
-    prazo: cur.prazo || "",
-    realizado: "",
-    status: "Em Andamento",
-    observacoes: cur.observacoes || "",
-    createdAt: now,
-    createdBy: me.email,
-    updatedAt: now,
-    updatedBy: me.email,
-    deletedAt: "",
-    deletedBy: "",
-  };
-
-  const created = await sheets.createTask(copy);
-  bustTasksCache();
-  res.json({ ok: true, task: created });
-}));
-
-app.put("/api/tasks/:id", authMiddleware, a(async (req: any, res: any) => {
-  const me = req.user as AuthedUser;
-  const id = mustString(req.params.id, "id");
-
-  const all = await listTasksCached();
-  const current = all.find((t) => t.id === id);
-  if (!current) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
-
-  const normalizeClear = (patch: any) => {
-    if (patch.realizado === "CLEAR") patch.realizado = "";
-  };
-
-  if (me.role === "USER") {
-    const patch: any = { updatedAt: nowIso(), updatedBy: me.email };
-    if (req.body.status !== undefined) patch.status = req.body.status;
-    if (req.body.realizado !== undefined) patch.realizado = req.body.realizado;
-
-    if (patch.status === undefined && patch.realizado === undefined) {
-      return res.status(403).json({ ok: false, error: "Usuário só pode concluir/reabrir." });
+    let responsavelEmail = me.email;
+    if ((me.role === "ADMIN" || me.role === "LEADER") && req.body.responsavelEmail) {
+      responsavelEmail = safeLowerEmail(req.body.responsavelEmail);
     }
-    if (safeLowerEmail(current.responsavelEmail) !== me.email) {
+
+    const u = await getUserByEmailSafe(responsavelEmail);
+    const area = u?.area ? String(u.area) : String(me.area || "");
+    if (me.role === "LEADER" && area !== String(me.area || "")) {
+      return res.status(403).json({ ok: false, error: "Leader não pode criar tarefa fora da sua área." });
+    }
+
+    const competenciaYm = normYm(req.body.competenciaYm || req.body.competencia);
+
+    const task: any = {
+      competenciaYm,
+      competencia: competenciaYm,
+      recorrencia: req.body.recorrencia || "",
+      tipo: req.body.tipo || "",
+      atividade: mustString(req.body.atividade, "Atividade"),
+      responsavelEmail,
+      responsavelNome: String(u?.nome || ""),
+      area,
+      prazo: req.body.prazo || "",
+      realizado: req.body.realizado || "",
+      status: req.body.status || "",
+      observacoes: req.body.observacoes || "",
+      createdAt: now,
+      createdBy: me.email,
+      updatedAt: now,
+      updatedBy: me.email,
+      deletedAt: "",
+      deletedBy: "",
+    };
+
+    const created = await sheets.createTask(task);
+    bustTasksCache();
+    res.json({ ok: true, task: created });
+  })
+);
+
+app.post(
+  "/api/tasks/:id/duplicate",
+  authMiddleware,
+  a(async (req: any, res: any) => {
+    const me = req.user as AuthedUser;
+    if (me.role === "USER") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+    const id = mustString(req.params.id, "id");
+    const all = await listTasksCached();
+    const cur = all.find((t) => t.id === id);
+    if (!cur) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    if (me.role === "LEADER" && String(cur.area || "") !== String(me.area || "")) {
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
 
+    const newEmail = safeLowerEmail(cur.responsavelEmail);
+    const u = await getUserByEmailSafe(newEmail);
+
+    const now = nowIso();
+    const competenciaYm = normYm(cur.competenciaYm || cur.competencia);
+
+    const copy: any = {
+      competenciaYm,
+      competencia: competenciaYm,
+      recorrencia: cur.recorrencia || "",
+      tipo: cur.tipo || "",
+      atividade: cur.atividade || "",
+      responsavelEmail: newEmail,
+      responsavelNome: String(u?.nome || cur.responsavelNome || ""),
+      area: String(u?.area || cur.area || me.area || ""),
+      prazo: cur.prazo || "",
+      realizado: "",
+      status: "Em Andamento",
+      observacoes: cur.observacoes || "",
+      createdAt: now,
+      createdBy: me.email,
+      updatedAt: now,
+      updatedBy: me.email,
+      deletedAt: "",
+      deletedBy: "",
+    };
+
+    const created = await sheets.createTask(copy);
+    bustTasksCache();
+    res.json({ ok: true, task: created });
+  })
+);
+
+app.put(
+  "/api/tasks/:id",
+  authMiddleware,
+  a(async (req: any, res: any) => {
+    const me = req.user as AuthedUser;
+    const id = mustString(req.params.id, "id");
+
+    const all = await listTasksCached();
+    const current = all.find((t) => t.id === id);
+    if (!current) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const normalizeClear = (patch: any) => {
+      if (patch.realizado === "CLEAR") patch.realizado = "";
+    };
+
+    // USER: pode concluir/reabrir + editar observacoes (somente)
+    if (me.role === "USER") {
+      if (safeLowerEmail(current.responsavelEmail) !== me.email) {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+
+      const patch: any = { updatedAt: nowIso(), updatedBy: me.email };
+
+      if (req.body.status !== undefined) patch.status = req.body.status;
+      if (req.body.realizado !== undefined) patch.realizado = req.body.realizado;
+      if (req.body.observacoes !== undefined) patch.observacoes = String(req.body.observacoes || "");
+
+      // precisa ter ao menos um campo permitido
+      if (
+        patch.status === undefined &&
+        patch.realizado === undefined &&
+        patch.observacoes === undefined
+      ) {
+        return res.status(403).json({ ok: false, error: "Sem alterações permitidas." });
+      }
+
+      normalizeClear(patch);
+      const updated = await sheets.updateTask(id, patch);
+      bustTasksCache();
+      return res.json({ ok: true, task: updated });
+    }
+
+    // LEADER/ADMIN
+    const patch: any = { ...req.body, updatedAt: nowIso(), updatedBy: me.email };
     normalizeClear(patch);
+
+    // normaliza competência se veio
+    if (patch.competenciaYm || patch.competencia) {
+      const ym = normYm(patch.competenciaYm || patch.competencia);
+      patch.competenciaYm = ym;
+      patch.competencia = ym;
+    }
+
+    if (patch.responsavelEmail) {
+      const newEmail = safeLowerEmail(patch.responsavelEmail);
+      const u = await getUserByEmailSafe(newEmail);
+      patch.responsavelEmail = newEmail;
+      patch.responsavelNome = String(u?.nome || "");
+      patch.area = String(u?.area || current.area || "");
+
+      if (me.role === "LEADER" && String(patch.area || "") !== String(me.area || "")) {
+        return res.status(403).json({ ok: false, error: "Leader não pode reatribuir para fora da área." });
+      }
+    }
+
+    if (!canEditTask(me, current, patch)) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
     const updated = await sheets.updateTask(id, patch);
     bustTasksCache();
-    return res.json({ ok: true, task: updated });
-  }
+    res.json({ ok: true, task: updated });
+  })
+);
 
-  const patch: any = { ...req.body, updatedAt: nowIso(), updatedBy: me.email };
+app.delete(
+  "/api/tasks/:id",
+  authMiddleware,
+  a(async (req: any, res: any) => {
+    const me = req.user as AuthedUser;
+    const id = mustString(req.params.id, "id");
 
-  // compatibilidade: se o front mandar competenciaYm, também grava "competencia"
-  if (patch.competenciaYm && !patch.competencia) {
-    patch.competencia = patch.competenciaYm;
-  }
+    const all = await listTasksCached();
+    const current = all.find((t) => t.id === id);
+    if (!current) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
 
-  normalizeClear(patch);
+    if (!canDeleteTask(me, current)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
 
-  if (patch.responsavelEmail) {
-    const newEmail = safeLowerEmail(patch.responsavelEmail);
-    const u = await getUserByEmailSafe(newEmail);
-    patch.responsavelEmail = newEmail;
-    patch.responsavelNome = String(u?.nome || "");
-    patch.area = String(u?.area || current.area || "");
-
-    if (me.role === "LEADER" && String(patch.area || "") !== String(me.area || "")) {
-      return res.status(403).json({ ok: false, error: "Leader não pode reatribuir para fora da área." });
-    }
-  }
-
-  if (!canEditTask(me, current, patch)) {
-    return res.status(403).json({ ok: false, error: "FORBIDDEN" });
-  }
-
-  const updated = await sheets.updateTask(id, patch);
-  bustTasksCache();
-  res.json({ ok: true, task: updated });
-}));
-
-app.delete("/api/tasks/:id", authMiddleware, a(async (req: any, res: any) => {
-  const me = req.user as AuthedUser;
-  const id = mustString(req.params.id, "id");
-
-  const all = await listTasksCached();
-  const current = all.find((t) => t.id === id);
-  if (!current) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
-
-  if (!canDeleteTask(me, current)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
-
-  const deleted = await sheets.softDeleteTask(id, me.email);
-  bustTasksCache();
-  res.json({ ok: true, task: deleted });
-}));
+    const deleted = await sheets.softDeleteTask(id, me.email);
+    bustTasksCache();
+    res.json({ ok: true, task: deleted });
+  })
+);
 
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error("SERVER_ERROR:", err);
