@@ -98,17 +98,142 @@ function toInputDate(v) {
   return `${y}-${m}-${day}`;
 }
 
+/* ===== Sorting ===== */
+const SORT_FIELDS = [
+  { value: "prazo", label: "Prazo" },
+  { value: "status", label: "Status" },
+  { value: "responsavel", label: "Responsável" },
+  { value: "atividade", label: "Atividade" },
+  { value: "competencia", label: "Competência" },
+  { value: "tipo", label: "Tipo" },
+  { value: "recorrencia", label: "Recorrência" },
+  { value: "realizado", label: "Realizado" },
+];
+
+function fillSortSelect() {
+  const el = $("fSort");
+  if (!el) return;
+  el.innerHTML = "";
+  SORT_FIELDS.forEach((f) => {
+    const o = document.createElement("option");
+    o.value = f.value;
+    o.textContent = f.label;
+    el.appendChild(o);
+  });
+  el.value = "prazo"; // padrão
+  const dir = $("fDir");
+  if (dir) dir.value = "asc";
+}
+
+function normStr(v) { return String(v || "").trim().toLowerCase(); }
+
+function sortTasks(list) {
+  const key = ($("fSort")?.value || "prazo").trim();
+  const dir = ($("fDir")?.value || "asc").trim();
+  const mult = dir === "desc" ? -1 : 1;
+
+  const getDate = (v) => {
+    const d = parseISO(v);
+    return d ? d.getTime() : null;
+  };
+
+  const getComp = (t) => {
+    // AAAA-MM (backend) ou outras variações; deixa como string e compara
+    const s = String(t.competenciaYm || t.competencia || "").trim();
+    return s;
+  };
+
+  const base = (list || []).slice();
+  base.sort((a, b) => {
+    // fallback estável: prazo, atividade
+    const fallback = () => {
+      const ap = getDate(a.prazo), bp = getDate(b.prazo);
+      if (ap != null && bp != null && ap !== bp) return (ap - bp) * mult;
+      if (ap == null && bp != null) return 1;
+      if (ap != null && bp == null) return -1;
+
+      const aa = normStr(a.atividade), bb = normStr(b.atividade);
+      const c = aa.localeCompare(bb, "pt-BR");
+      if (c) return c * mult;
+      return 0;
+    };
+
+    if (key === "prazo") {
+      const ap = getDate(a.prazo), bp = getDate(b.prazo);
+      if (ap != null && bp != null && ap !== bp) return (ap - bp) * mult;
+      if (ap == null && bp != null) return 1;
+      if (ap != null && bp == null) return -1;
+      return fallback();
+    }
+
+    if (key === "realizado") {
+      const ar = getDate(a.realizado), br = getDate(b.realizado);
+      if (ar != null && br != null && ar !== br) return (ar - br) * mult;
+      if (ar == null && br != null) return 1;
+      if (ar != null && br == null) return -1;
+      return fallback();
+    }
+
+    if (key === "competencia") {
+      const ac = getComp(a), bc = getComp(b);
+      const c = ac.localeCompare(bc, "pt-BR");
+      if (c) return c * mult;
+      return fallback();
+    }
+
+    if (key === "responsavel") {
+      const ar = normStr(a.responsavelNome || a.responsavelEmail);
+      const br = normStr(b.responsavelNome || b.responsavelEmail);
+      const c = ar.localeCompare(br, "pt-BR");
+      if (c) return c * mult;
+      return fallback();
+    }
+
+    if (key === "atividade") {
+      const aa = normStr(a.atividade), bb = normStr(b.atividade);
+      const c = aa.localeCompare(bb, "pt-BR");
+      if (c) return c * mult;
+      return fallback();
+    }
+
+    if (key === "status") {
+      const as = normStr(a.status), bs = normStr(b.status);
+      const c = as.localeCompare(bs, "pt-BR");
+      if (c) return c * mult;
+      return fallback();
+    }
+
+    if (key === "tipo") {
+      const at = normStr(a.tipo), bt = normStr(b.tipo);
+      const c = at.localeCompare(bt, "pt-BR");
+      if (c) return c * mult;
+      return fallback();
+    }
+
+    if (key === "recorrencia") {
+      const ar = normStr(a.recorrencia), br = normStr(b.recorrencia);
+      const c = ar.localeCompare(br, "pt-BR");
+      if (c) return c * mult;
+      return fallback();
+    }
+
+    return fallback();
+  });
+
+  return base;
+}
+
 function applyFilters(list) {
   const ativ = ($("fAtiv")?.value || "").trim().toLowerCase();
-  const status = ($("fStatus").value || "").trim();
+  const status = ($("fStatus")?.value || "").trim();
   const resp = ($("fResp")?.value || "").trim();
-  const fromStr = $("fFrom").value;
-  const toStr = $("fTo").value;
+  const fromStr = $("fFrom")?.value || "";
+  const toStr = $("fTo")?.value || "";
 
   const from = fromStr ? startOfDay(parseISO(fromStr)) : null;
   const to = toStr ? endOfDay(parseISO(toStr)) : null;
 
-  return (list || []).filter((t) => {
+  const filtered = (list || []).filter((t) => {
     if (ativ) {
       const a = String(t.atividade || "").toLowerCase();
       if (!a.includes(ativ)) return false;
@@ -136,6 +261,8 @@ function applyFilters(list) {
 
     return true;
   });
+
+  return sortTasks(filtered);
 }
 
 function isDoneTask(t) {
@@ -242,11 +369,13 @@ async function bootstrap() {
   lookups = (lres && lres.ok && lres.lookups) ? lres.lookups : {};
   users = (ures && ures.ok && ures.users) ? ures.users : [];
 
+  // filtros default (hoje)
   const today = new Date();
   const todayYMD = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
   $("fFrom").value = todayYMD;
   $("fTo").value = todayYMD;
 
+  // status
   const statusFilter = [
     ...(lookups.STATUS || []),
     "Em Atraso",
@@ -254,16 +383,19 @@ async function bootstrap() {
   ];
   fillSelect($("fStatus"), statusFilter, { empty: "Todos" });
 
+  // sort
+  fillSortSelect();
+
+  // responsável
   const fResp = $("fResp");
   if (fResp) {
-    const wrap = fResp.closest(".field"); // remove o bloco inteiro (label + select)
+    const wrap = fResp.closest(".field");
     if (me.role === "USER") {
       if (wrap) wrap.remove();
     } else {
       fillUsersSelect(fResp, users, { empty: "Todos responsáveis" });
     }
   }
-
 
   setupCompetenciaSelects();
   fillSelect($("mRecorrencia"), lookups.RECORRENCIA || []);
@@ -275,6 +407,8 @@ async function bootstrap() {
   $("btnRefresh").onclick = () => loadTasks();
   $("btnFilter").onclick = () => renderFromLocal();
   $("fAtiv")?.addEventListener("input", () => renderFromLocal());
+  $("fSort")?.addEventListener("change", () => renderFromLocal());
+  $("fDir")?.addEventListener("change", () => renderFromLocal());
 
   $("mClose").onclick = () => closeModal();
   $("mCancel").onclick = () => closeModal();
@@ -333,8 +467,8 @@ function renderTable(list) {
 
     tr.innerHTML = `
       <td class="col-comp">${fmtCompetencia(t.competenciaYm || t.competencia)}</td>
-      <td class="col-rec">${t.recorrencia || ""}</td>
-      <td class="col-tipo">${t.tipo || ""}</td>
+      <td class="col-rec">${escapeHtml(t.recorrencia || "")}</td>
+      <td class="col-tipo">${escapeHtml(t.tipo || "")}</td>
 
       <td class="col-atividade" title="${escapeHtml(activity)}">
         <div class="atividadeCell ${obs ? "hasObs" : ""}">
@@ -358,7 +492,7 @@ function renderTable(list) {
 
       <td class="col-acoes"></td>
     `;
-    
+
     const td = tr.querySelector("td:last-child");
     const row = document.createElement("div");
     row.className = "rowActions";

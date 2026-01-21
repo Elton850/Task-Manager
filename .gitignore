@@ -3,3 +3,5 @@ dist/
 .env
 .env.*
 .DS_Store
+code task-manager-sheets
+order table task-manager-sheets

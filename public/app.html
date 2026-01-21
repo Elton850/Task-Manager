@@ -43,27 +43,45 @@
       </section>
 
       <section class="card">
-        <div class="grid" style="grid-template-columns: 220px 1fr 1fr 140px;">
+        <div class="grid" style="grid-template-columns: 220px 1fr 1fr 180px 140px;">
           <div class="field">
             <label>Status</label>
             <select id="fStatus"></select>
           </div>
+
           <div class="field">
             <label>Responsável</label>
             <select id="fResp"></select>
           </div>
+
           <div class="field">
             <label>Atividade</label>
             <input id="fAtiv" type="text" placeholder="Filtrar por atividade..." />
           </div>
+
+          <div class="field">
+            <label>Ordenar por</label>
+            <select id="fSort"></select>
+          </div>
+
+          <div class="field">
+            <label>Direção</label>
+            <select id="fDir">
+              <option value="asc">↑ Crescente</option>
+              <option value="desc">↓ Decrescente</option>
+            </select>
+          </div>
+
           <div class="field">
             <label>Prazo (de)</label>
             <input type="date" id="fFrom" />
           </div>
+
           <div class="field">
             <label>Prazo (até)</label>
             <input type="date" id="fTo" />
           </div>
+
           <div class="field">
             <label>&nbsp;</label>
             <button class="btn" id="btnFilter">Filtrar</button>
