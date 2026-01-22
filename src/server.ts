@@ -128,6 +128,7 @@ function applyDoneLateRule(finalStatus: any, finalPrazo: any, finalRealizado: an
 app.use("/public", express.static(path.join(process.cwd(), "public")));
 
 app.get("/", (_, res) => res.sendFile(path.join(process.cwd(), "public/login.html")));
+app.get("/calendar", (_, res) => res.sendFile(path.join(process.cwd(), "public/calendar.html")));
 app.get("/app", (_, res) => res.sendFile(path.join(process.cwd(), "public/app.html")));
 app.get("/admin", (_, res) => res.sendFile(path.join(process.cwd(), "public/admin.html")));
 app.get("/admin/users", (_, res) => res.sendFile(path.join(process.cwd(), "public/users.html")));

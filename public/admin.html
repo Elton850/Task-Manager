@@ -14,7 +14,9 @@
 
       <nav class="nav">
         <a href="/app">Tasks</a>
-        <a class="active" href="/admin">Admin • Config</a>
+        <a href="/calendar">Calendário</a>
+        <a id="adminLink" href="/admin" class="active" style="display:none;">Admin • Config</a>
+        <a id="usersLink" href="/admin/users" style="display:none;">Admin • Usuários</a>
         <a href="#" id="btnLogout">Sair</a>
       </nav>
     </aside>
@@ -61,6 +63,9 @@
         <div class="card" style="margin:0;background:rgba(0,0,0,.12)">
           <div class="sub">Itens ativos na categoria selecionada</div>
           <div style="height:10px"></div>
+
+          <div class="hint" id="loadingLookups" style="display:none;">Carregando...</div>
+          
           <div id="list" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
           <div class="hint" id="hint"></div>
         </div>

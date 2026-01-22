@@ -10,8 +10,13 @@ async function bootstrap() {
   me = meRes.user;
   if (me.role !== "ADMIN") return logout();
 
-  $("meLine").textContent = `${me.nome || me.email} • ADMIN`;
+  $("meLine").textContent = `${me.nome || me.email} • ${me.role} • Área: ${me.area || "-"}`;
   $("btnLogout").onclick = (e) => { e.preventDefault(); logout(); };
+
+  const a = document.getElementById("adminLink");
+  if (a) a.style.display = "block";
+  const u = document.getElementById("usersLink");
+  if (u) u.style.display = "block";
 
   $("cat").onchange = () => { selected = null; render(); };
   $("add").onclick = addItem;
@@ -22,9 +27,24 @@ async function bootstrap() {
 }
 
 async function loadLookups() {
-  const res = await api("/api/lookups");
-  if (!res.ok) { $("hint").textContent = res.error || "Erro"; return; }
-  lookups = res.lookups || {};
+  const loading = $("loadingLookups");
+  const hint = $("hint");
+  const list = $("list");
+
+  if (hint) hint.textContent = "";
+  if (list) list.innerHTML = "";
+  if (loading) loading.style.display = "block";
+
+  try {
+    const res = await api("/api/lookups");
+    if (!res.ok) {
+      if (hint) hint.textContent = res.error || "Erro";
+      return;
+    }
+    lookups = res.lookups || {};
+  } finally {
+    if (loading) loading.style.display = "none";
+  }
 }
 
 function render() {

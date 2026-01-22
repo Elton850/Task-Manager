@@ -29,8 +29,14 @@ async function bootstrap() {
   me = meRes.user;
   if (me.role !== "ADMIN") return logout();
 
-  $("meLine").textContent = `${me.nome || me.email} • ADMIN`;
+  $("meLine").textContent = `${me.nome || me.email} • ${me.role} • Área: ${me.area || "-"}`;
   $("btnLogout").onclick = (e) => { e.preventDefault(); logout(); };
+
+  // mostra links de admin no menu (mesmo padrão do app)
+  const a = document.getElementById("adminLink");
+  if (a) a.style.display = "block";
+  const u = document.getElementById("usersLink");
+  if (u) u.style.display = "block";
 
   $("btnNew").onclick = () => edit(null);
   $("mClose").onclick = () => openModal(false);

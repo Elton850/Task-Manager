@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Calendário • Task Manager</title>
+  <link rel="stylesheet" href="/public/assets/css/app.css" />
+  <link rel="stylesheet" href="/public/assets/css/calendar.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">Task Manager</div>
+      <div class="sub" id="meLine">Carregando...</div>
+
+      <nav class="nav">
+        <a href="/app">Tasks</a>
+        <a class="active" href="/calendar">Calendário</a>
+        <a id="adminLink" href="/admin" style="display:none;">Admin • Config</a>
+        <a id="usersLink" href="/admin/users" style="display:none;">Admin • Usuários</a>
+        <a href="#" id="btnLogout">Sair</a>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <div class="h1">Calendário</div>
+          <div class="sub">Quantidade por dia e status</div>
+        </div>
+
+        <div class="right">
+          <button class="btn ghost" id="btnPrev">←</button>
+          <div class="monthTitle" id="monthTitle"></div>
+          <button class="btn ghost" id="btnNext">→</button>
+          <button class="btn ghost" id="btnToday">Hoje</button>
+          <button class="btn ghost" id="btnRefresh">⟳</button>
+        </div>
+      </div>
+
+      <section class="card alerts">
+        <div class="alert">
+          <div class="k">Vencem amanhã</div>
+          <div class="v" id="aTomorrow">0</div>
+        </div>
+        <div class="alert">
+          <div class="k">Vencem em 3 dias</div>
+          <div class="v" id="a3">0</div>
+        </div>
+        <div class="alert">
+          <div class="k">Vencem em 7 dias</div>
+          <div class="v" id="a7">0</div>
+        </div>
+        <div class="alert">
+          <div class="k">Já em atraso</div>
+          <div class="v" id="aLate">0</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="legend">
+          <span class="lg"><span class="dot d-and"></span> Em Andamento</span>
+          <span class="lg"><span class="dot d-late"></span> Em Atraso</span>
+          <span class="lg"><span class="dot d-done"></span> Concluída</span>
+          <span class="lg"><span class="dot d-doneLate"></span> Concluída em Atraso</span>
+        </div>
+
+        <div class="cal">
+          <div class="calHead">
+            <div>Dom</div><div>Seg</div><div>Ter</div><div>Qua</div><div>Qui</div><div>Sex</div><div>Sáb</div>
+          </div>
+          <div class="calGrid" id="calGrid"></div>
+        </div>
+
+        <div class="hint" id="hint"></div>
+      </section>
+
+      <section class="card">
+        <div class="dayTitle" id="dayTitle">Selecione um dia</div>
+
+        <div class="cols">
+          <div class="col">
+            <div class="colHead"><span class="dot d-and"></span> Em Andamento</div>
+            <div class="list" id="listAnd"></div>
+          </div>
+          <div class="col">
+            <div class="colHead"><span class="dot d-late"></span> Em Atraso</div>
+            <div class="list" id="listLate"></div>
+          </div>
+          <div class="col">
+            <div class="colHead"><span class="dot d-done"></span> Concluídas</div>
+            <div class="list" id="listDone"></div>
+          </div>
+          <div class="col">
+            <div class="colHead"><span class="dot d-doneLate"></span> Concluídas em Atraso</div>
+            <div class="list" id="listDoneLate"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/public/assets/js/shared.js"></script>
+  <script src="/public/assets/js/calendar-page.js"></script>
+</body>
+</html>

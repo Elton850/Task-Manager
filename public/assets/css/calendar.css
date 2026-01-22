@@ -1,0 +1,254 @@
+/* Calendar add-on: usa o tema do app.css e só adiciona o que falta */
+
+.monthTitle{
+  min-width: 180px;
+  text-align: center;
+  font-weight: 800;
+  color: var(--muted);
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(0,0,0,.18);
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow: var(--shadow-in);
+}
+
+.card.alerts{
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.alert{
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: rgba(0,0,0,.20);
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow: var(--shadow-in);
+}
+
+.alert .k{
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: .35px;
+  text-transform: uppercase;
+}
+.alert .v{
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 850;
+}
+
+.legend{
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.lg{ display:flex; align-items:center; gap:8px; }
+
+.dot{
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+/* cores alinhadas com o app.css */
+.d-and{ background: var(--a3); }
+.d-done{ background: var(--a2); }
+.d-late{ background: var(--bad); }
+.d-doneLate{ background: var(--warn); }
+
+/* ===== Calendar grid ===== */
+.cal{
+  position: relative;
+  z-index: 1;
+}
+
+.calHead{
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 10px;
+  color: rgba(255,255,255,.65);
+  font-size: 12px;
+  letter-spacing: .35px;
+  text-transform: uppercase;
+  padding: 0 2px 10px;
+}
+
+.calGrid{
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 10px;
+}
+
+.dayCell{
+  border-radius: 16px;
+  padding: 12px 12px 10px;
+  background: rgba(0,0,0,.20);
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow: var(--shadow-in);
+  min-height: 92px;
+  cursor: pointer;
+  transition: transform .12s ease, border-color .12s ease, background .12s ease;
+}
+
+.dayCell:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,.14);
+  background: rgba(0,0,0,.26);
+}
+
+.dayCell.muted{
+  opacity: .45;
+  cursor: default;
+  transform: none !important;
+}
+
+.dayCell.selected{
+  border-color: rgba(124,58,237,.45);
+  box-shadow: var(--focus), var(--shadow-in);
+}
+
+.dayTop{
+  display:flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dayNum{
+  font-weight: 900;
+  letter-spacing: .2px;
+}
+
+.badges{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.badge{
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.82);
+  white-space: nowrap;
+}
+
+.b-and{ border-color: rgba(6,182,212,.35); background: rgba(6,182,212,.12); }
+.b-done{ border-color: rgba(34,197,94,.35); background: rgba(34,197,94,.12); }
+.b-late{ border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.12); }
+.b-doneLate{ border-color: rgba(245,158,11,.35); background: rgba(245,158,11,.12); }
+
+/* ===== Details 4 columns ===== */
+.dayTitle{
+  position: relative;
+  z-index: 1;
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+
+.cols{
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.col{
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(0,0,0,.20);
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow: var(--shadow-in);
+  min-height: 240px;
+}
+
+.colHead{
+  display:flex;
+  align-items:center;
+  gap: 8px;
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+
+.list{
+  display:flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.item{
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 16px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,.06);
+}
+
+.item .t{
+  font-weight: 800;
+}
+
+.item .m{
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  display:flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* pills reaproveitam a estética do app.css */
+.pill{
+  display:inline-flex;
+  align-items:center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.86);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.pill::before{
+  content:"";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.55);
+}
+
+.p-and{ border-color: rgba(6,182,212,.40); background: rgba(6,182,212,.12); }
+.p-and::before{ background: rgba(6,182,212,.95); }
+
+.p-done{ border-color: rgba(34,197,94,.40); background: rgba(34,197,94,.12); }
+.p-done::before{ background: rgba(34,197,94,.95); }
+
+.p-late{ border-color: rgba(239,68,68,.40); background: rgba(239,68,68,.12); }
+.p-late::before{ background: rgba(239,68,68,.95); }
+
+.p-doneLate{ border-color: rgba(245,158,11,.40); background: rgba(245,158,11,.12); }
+.p-doneLate::before{ background: rgba(245,158,11,.95); }
+
+/* ===== Responsive ===== */
+@media (max-width: 1200px){
+  .card.alerts{ grid-template-columns: repeat(2, 1fr); }
+  .cols{ grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+}
+
+@media (max-width: 860px){
+  .card.alerts{ grid-template-columns: 1fr; }
+  .cols{ grid-template-columns: 1fr; }
+  .monthTitle{ min-width: 140px; }
+}
