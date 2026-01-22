@@ -24,6 +24,7 @@
   background: rgba(0,0,0,.20);
   border: 1px solid rgba(255,255,255,.08);
   box-shadow: var(--shadow-in);
+  min-width: 0;
 }
 
 .alert .k{
@@ -67,11 +68,12 @@
 .cal{
   position: relative;
   z-index: 1;
+  min-width: 0;
 }
 
 .calHead{
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 10px;
   color: rgba(255,255,255,.65);
   font-size: 12px;
@@ -82,7 +84,7 @@
 
 .calGrid{
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -95,6 +97,8 @@
   min-height: 92px;
   cursor: pointer;
   transition: transform .12s ease, border-color .12s ease, background .12s ease;
+  overflow: hidden;          /* evita vazamento visual */
+  min-width: 0;              /* permite encolher no grid */
 }
 
 .dayCell:hover{
@@ -118,6 +122,8 @@
   display:flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .dayNum{
@@ -130,8 +136,10 @@
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 10px;
+  min-width: 0;
 }
 
+/* badges não podem estourar */
 .badge{
   font-size: 11px;
   padding: 4px 10px;
@@ -140,6 +148,9 @@
   background: rgba(255,255,255,.06);
   color: rgba(255,255,255,.82);
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .b-and{ border-color: rgba(6,182,212,.35); background: rgba(6,182,212,.12); }
@@ -147,20 +158,35 @@
 .b-late{ border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.12); }
 .b-doneLate{ border-color: rgba(245,158,11,.35); background: rgba(245,158,11,.12); }
 
-/* ===== Details 4 columns ===== */
+/* ===== Details (segmentado) ===== */
 .dayTitle{
   position: relative;
   z-index: 1;
   font-weight: 900;
   margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.btnBack{ padding: 8px 12px; }
+
+/* sem scroll: colunas encaixadas na largura do calendário */
+.colsWrap{
+  overflow: hidden;
+  min-width: 0;
 }
 
 .cols{
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: repeat(4, minmax(220px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+  width: 100%;
+  min-width: 0;
 }
 
 .col{
@@ -170,6 +196,7 @@
   border: 1px solid rgba(255,255,255,.08);
   box-shadow: var(--shadow-in);
   min-height: 240px;
+  min-width: 0; /* CRÍTICO */
 }
 
 .colHead{
@@ -178,12 +205,14 @@
   gap: 8px;
   font-weight: 900;
   margin-bottom: 10px;
+  min-width: 0;
 }
 
 .list{
   display:flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
 }
 
 .item{
@@ -191,10 +220,15 @@
   border-radius: 16px;
   padding: 10px 12px;
   background: rgba(255,255,255,.06);
+  min-width: 0;
+  overflow: hidden; /* impede “vazar” */
 }
 
 .item .t{
   font-weight: 800;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .item .m{
@@ -204,9 +238,18 @@
   display:flex;
   gap: 10px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
-/* pills reaproveitam a estética do app.css */
+/* spans do meta não podem estourar */
+.item .m > span{
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* pills */
 .pill{
   display:inline-flex;
   align-items:center;
@@ -219,6 +262,9 @@
   font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pill::before{
@@ -227,6 +273,7 @@
   height: 7px;
   border-radius: 999px;
   background: rgba(255,255,255,.55);
+  flex: 0 0 auto;
 }
 
 .p-and{ border-color: rgba(6,182,212,.40); background: rgba(6,182,212,.12); }
@@ -243,12 +290,18 @@
 
 /* ===== Responsive ===== */
 @media (max-width: 1200px){
-  .card.alerts{ grid-template-columns: repeat(2, 1fr); }
-  .cols{ grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+  .card.alerts{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cols{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 860px){
   .card.alerts{ grid-template-columns: 1fr; }
   .cols{ grid-template-columns: 1fr; }
   .monthTitle{ min-width: 140px; }
+}
+
+/* em telas bem pequenas, deixa os badges quebrarem linha se precisar */
+@media (max-width: 420px){
+  .badge{ white-space: normal; }
+  .pill{ white-space: normal; }
 }

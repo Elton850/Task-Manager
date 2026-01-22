@@ -57,7 +57,34 @@
         </div>
       </section>
 
-      <section class="card">
+      <!-- GRID DO DIA (fica oculto no início) -->
+      <section class="card" id="dayPanel" style="display:none;">
+        <div class="dayTitle" id="dayTitle"></div>
+
+        <div class="colsWrap">
+          <div class="cols">
+            <div class="col">
+              <div class="colHead"><span class="dot d-and"></span> Em Andamento</div>
+              <div class="list" id="listAnd"></div>
+            </div>
+            <div class="col">
+              <div class="colHead"><span class="dot d-late"></span> Em Atraso</div>
+              <div class="list" id="listLate"></div>
+            </div>
+            <div class="col">
+              <div class="colHead"><span class="dot d-done"></span> Concluídas</div>
+              <div class="list" id="listDone"></div>
+            </div>
+            <div class="col">
+              <div class="colHead"><span class="dot d-doneLate"></span> Concluídas em Atraso</div>
+              <div class="list" id="listDoneLate"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CALENDÁRIO (fica visível no início) -->
+      <section class="card" id="calPanel">
         <div class="legend">
           <span class="lg"><span class="dot d-and"></span> Em Andamento</span>
           <span class="lg"><span class="dot d-late"></span> Em Atraso</span>
@@ -73,29 +100,6 @@
         </div>
 
         <div class="hint" id="hint"></div>
-      </section>
-
-      <section class="card">
-        <div class="dayTitle" id="dayTitle">Selecione um dia</div>
-
-        <div class="cols">
-          <div class="col">
-            <div class="colHead"><span class="dot d-and"></span> Em Andamento</div>
-            <div class="list" id="listAnd"></div>
-          </div>
-          <div class="col">
-            <div class="colHead"><span class="dot d-late"></span> Em Atraso</div>
-            <div class="list" id="listLate"></div>
-          </div>
-          <div class="col">
-            <div class="colHead"><span class="dot d-done"></span> Concluídas</div>
-            <div class="list" id="listDone"></div>
-          </div>
-          <div class="col">
-            <div class="colHead"><span class="dot d-doneLate"></span> Concluídas em Atraso</div>
-            <div class="list" id="listDoneLate"></div>
-          </div>
-        </div>
       </section>
     </main>
   </div>

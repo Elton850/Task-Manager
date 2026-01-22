@@ -138,14 +138,12 @@ function sortTasks(list) {
   };
 
   const getComp = (t) => {
-    // AAAA-MM (backend) ou outras variações; deixa como string e compara
     const s = String(t.competenciaYm || t.competencia || "").trim();
     return s;
   };
 
   const base = (list || []).slice();
   base.sort((a, b) => {
-    // fallback estável: prazo, atividade
     const fallback = () => {
       const ap = getDate(a.prazo), bp = getDate(b.prazo);
       if (ap != null && bp != null && ap !== bp) return (ap - bp) * mult;
@@ -344,6 +342,26 @@ function renderFromLocal() {
   $("hint").textContent = `Mostrando: ${filtered.length} de ${tasks.length}`;
 }
 
+/* ===== URL filters (vindo do Calendário) ===== */
+function applyUrlFiltersIfAny() {
+  const qs = new URLSearchParams(window.location.search);
+  const from = qs.get("from");
+  const to = qs.get("to");
+  const status = qs.get("status");
+
+  let changed = false;
+
+  if (from && $("fFrom")) { $("fFrom").value = from; changed = true; }
+  if (to && $("fTo")) { $("fTo").value = to; changed = true; }
+
+  if (status && $("fStatus")) {
+    const ok = Array.from($("fStatus").options).some(o => o.value === status);
+    if (ok) { $("fStatus").value = status; changed = true; }
+  }
+
+  if (changed) renderFromLocal();
+}
+
 /* Bootstrap */
 async function bootstrap() {
   const meRes = await api("/api/me");
@@ -416,6 +434,9 @@ async function bootstrap() {
   $("mClearReal").onclick = () => clearRealizado();
 
   await loadTasks();
+
+  // aplica filtros vindos do Calendário (se existir querystring)
+  applyUrlFiltersIfAny();
 }
 
 /* load + render */
@@ -741,7 +762,6 @@ async function saveTask() {
     status: $("mStatus").value || "",
     responsavelEmail: $("mResp").value || "",
     atividade: ($("mAtividade").value || "").trim(),
-    // envia YYYY-MM-DD (backend já salva assim)
     prazo: $("mPrazo").value || "",
     realizado: $("mRealizado").value ? String($("mRealizado").value).slice(0, 10) : "",
     observacoes: ($("mObs").value || "").trim(),

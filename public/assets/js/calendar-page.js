@@ -5,6 +5,22 @@ let selectedYMD = null;
 
 const $ = (id) => document.getElementById(id);
 
+function showCalendar() {
+  $("dayPanel").style.display = "none";
+  $("calPanel").style.display = "block";
+  selectedYMD = null;
+  renderCalendar();
+}
+
+function showDayPanel(ymd) {
+  selectedYMD = ymd;
+  $("calPanel").style.display = "none";
+  $("dayPanel").style.display = "block";
+  renderCalendar();         // atualiza seleção
+  renderDayDetails(ymd);    // preenche colunas
+  document.querySelector(".main")?.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 function ymdFromDate(d){
   const y = d.getFullYear();
   const m = String(d.getMonth()+1).padStart(2,"0");
@@ -18,7 +34,7 @@ function parseISO(iso){
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m){
     const y = Number(m[1]), mm = Number(m[2]), dd = Number(m[3]);
-    const d = new Date(y, mm-1, dd);
+    const d = new Date(y, mm-1, dd); // local (sem bug de timezone)
     return isNaN(d.getTime()) ? null : d;
   }
   const d = new Date(s);
@@ -70,6 +86,27 @@ function escapeHtml(s){
     .replaceAll(">","&gt;")
     .replaceAll('"',"&quot;")
     .replaceAll("'","&#039;");
+}
+
+/* ===== integração com /app ===== */
+function toAppUrl(ymd, bucket){
+  const u = new URL(window.location.origin + "/app");
+  u.searchParams.set("from", ymd);
+  u.searchParams.set("to", ymd);
+
+  const map = {
+    AND: "Em Andamento",
+    LATE: "Em Atraso",
+    DONE: "Concluído",
+    DONE_LATE: "Concluído em Atraso",
+  };
+  if (bucket && map[bucket]) u.searchParams.set("status", map[bucket]);
+
+  return u.toString();
+}
+
+function goToTasks(ymd, bucket){
+  window.location.href = toAppUrl(ymd, bucket);
 }
 
 /* ===== alerts ===== */
@@ -135,7 +172,7 @@ function buildMonthGrid(ref){
 }
 
 function groupCountsByDay(all){
-  const map = new Map(); // ymd -> {AND,LATE,DONE,DONE_LATE,total}
+  const map = new Map();
   (all||[]).forEach(t=>{
     const ymd = String(t.prazo||"").slice(0,10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return;
@@ -156,12 +193,14 @@ function renderCalendar(){
 
   const counts = groupCountsByDay(tasks);
   const cells = buildMonthGrid(monthRef);
-
   const nowYMD = ymdFromDate(new Date());
 
   cells.forEach(c=>{
     const div = document.createElement("div");
-    div.className = "dayCell" + (c.inMonth ? "" : " muted") + (c.ymd === selectedYMD ? " selected" : "");
+    div.className =
+      "dayCell" +
+      (c.inMonth ? "" : " muted") +
+      (selectedYMD && c.ymd === selectedYMD ? " selected" : "");
 
     const info = counts.get(c.ymd) || { AND:0, LATE:0, DONE:0, DONE_LATE:0, total:0 };
 
@@ -179,21 +218,28 @@ function renderCalendar(){
     `;
 
     if (c.inMonth){
-      div.onclick = ()=> {
-        selectedYMD = c.ymd;
-        renderCalendar();
-        renderDayDetails(selectedYMD);
-      };
+      div.onclick = ()=> showDayPanel(c.ymd);
     }
 
     grid.appendChild(div);
   });
 
-  $("hint").textContent = `Mês: ${monthTitle(monthRef)} • Tasks com prazo preenchido: ${tasks.filter(t=>t.prazo).length}`;
+  $("hint").textContent =
+    `Mês: ${monthTitle(monthRef)} • Tasks com prazo preenchido: ${tasks.filter(t=>t.prazo).length}`;
 }
 
 function renderDayDetails(ymd){
-  $("dayTitle").textContent = `Dia ${fmtBR(ymd)} • Prazo`;
+  $("dayTitle").innerHTML = `
+    <button class="btn ghost btnBack" id="btnBackCal">← Voltar</button>
+    <span style="margin-left:10px;font-weight:900;">Dia ${fmtBR(ymd)} • Prazo</span>
+    <span style="margin-left:10px;">
+      <a href="${toAppUrl(ymd, "")}" style="color:inherit;text-decoration:underline;opacity:.85">
+        Ver no Task Manager
+      </a>
+    </span>
+  `;
+
+  $("btnBackCal").onclick = (e)=>{ e.preventDefault(); showCalendar(); };
 
   const dayTasks = (tasks||[]).filter(t => String(t.prazo||"").slice(0,10) === ymd);
 
@@ -210,15 +256,26 @@ function renderDayDetails(ymd){
     else and.push(t);
   });
 
-  renderList("listAnd", and, "AND");
-  renderList("listLate", late, "LATE");
-  renderList("listDone", done, "DONE");
-  renderList("listDoneLate", doneLate, "DONE_LATE");
+  renderList("listAnd", and, "AND", ymd);
+  renderList("listLate", late, "LATE", ymd);
+  renderList("listDone", done, "DONE", ymd);
+  renderList("listDoneLate", doneLate, "DONE_LATE", ymd);
 }
 
-function renderList(id, list, bucket){
+function renderList(id, list, bucket, ymd){
   const el = $(id);
   el.innerHTML = "";
+
+  // header da coluna clicável
+  const col = el.closest(".col");
+  if (col){
+    const head = col.querySelector(".colHead");
+    if (head){
+      head.style.cursor = "pointer";
+      head.title = "Abrir lista filtrada no Task Manager";
+      head.onclick = () => goToTasks(ymd, bucket);
+    }
+  }
 
   if (!list.length){
     el.innerHTML = `<div class="sub">Sem atividades</div>`;
@@ -239,6 +296,8 @@ function renderList(id, list, bucket){
   list.forEach(t=>{
     const item = document.createElement("div");
     item.className = "item";
+    item.style.cursor = "pointer";
+    item.title = "Abrir no Task Manager com filtro deste dia";
 
     const resp = t.responsavelNome || t.responsavelEmail || "-";
     const st = String(t.status || "");
@@ -253,6 +312,7 @@ function renderList(id, list, bucket){
       </div>
     `;
 
+    item.onclick = () => goToTasks(ymd, bucket);
     el.appendChild(item);
   });
 }
@@ -275,24 +335,28 @@ async function bootstrap(){
 
   $("btnPrev").onclick = ()=> { monthRef = new Date(monthRef.getFullYear(), monthRef.getMonth()-1, 1); renderCalendar(); };
   $("btnNext").onclick = ()=> { monthRef = new Date(monthRef.getFullYear(), monthRef.getMonth()+1, 1); renderCalendar(); };
+
   $("btnToday").onclick = ()=> {
     const now = new Date();
     monthRef = new Date(now.getFullYear(), now.getMonth(), 1);
-    selectedYMD = ymdFromDate(now);
     renderCalendar();
-    renderDayDetails(selectedYMD);
+    showDayPanel(ymdFromDate(now)); // hoje abre o grid e oculta calendário
   };
+
   $("btnRefresh").onclick = ()=> loadTasks();
 
   await loadTasks();
 
   const now = new Date();
-  selectedYMD = ymdFromDate(now);
+  selectedYMD = null;
   monthRef = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  // começa mostrando calendário
+  $("dayPanel").style.display = "none";
+  $("calPanel").style.display = "block";
 
   setAlerts(tasks);
   renderCalendar();
-  renderDayDetails(selectedYMD);
 }
 
 async function loadTasks(){
@@ -302,7 +366,11 @@ async function loadTasks(){
   tasks = res.tasks || [];
   setAlerts(tasks);
   renderCalendar();
-  if (selectedYMD) renderDayDetails(selectedYMD);
+
+  // se estiver no modo dia, re-renderiza o painel
+  if ($("dayPanel").style.display !== "none" && selectedYMD) {
+    renderDayDetails(selectedYMD);
+  }
 }
 
 document.addEventListener("DOMContentLoaded", bootstrap);
