@@ -422,8 +422,10 @@ app.post(
     if (me.role !== "ADMIN") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
 
     const email = mustString(req.body.email, "Email").toLowerCase();
-    const password = mustString(req.body.password, "Senha");
-    const passwordHash = await bcrypt.hash(password, 12);
+
+    // senha agora é OPCIONAL (novo fluxo: primeiro acesso/reset via código)
+    const rawPass = String(req.body.password || "").trim();
+    const passwordHash = rawPass ? await bcrypt.hash(rawPass, 12) : "";
 
     const user = await sheets.userUpsert(
       {
@@ -433,7 +435,7 @@ app.post(
         area: req.body.area || "",
         active: req.body.active ?? true,
         canDelete: req.body.canDelete ?? false,
-        passwordHash,
+        passwordHash, // pode ser "" (sem senha) -> exige reset/código para entrar
       },
       me.email
     );
@@ -450,6 +452,7 @@ app.put(
     if (me.role !== "ADMIN") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
 
     const email = mustString(req.params.email, "Email").toLowerCase();
+
     const patch: any = {
       email,
       nome: req.body.nome,
@@ -459,7 +462,9 @@ app.put(
       canDelete: req.body.canDelete,
     };
 
-    if (req.body.password) patch.passwordHash = await bcrypt.hash(String(req.body.password), 12);
+    // senha continua opcional na edição
+    const rawPass = String(req.body.password || "").trim();
+    if (rawPass) patch.passwordHash = await bcrypt.hash(rawPass, 12);
 
     const user = await sheets.userUpsert(patch, me.email);
     res.json({ ok: true, user });
