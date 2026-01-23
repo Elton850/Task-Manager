@@ -3,6 +3,7 @@ import express from "express";
 import helmet from "helmet";
 import path from "path";
 import bcrypt from "bcryptjs";
+import cookieParser from "cookie-parser";
 
 import { login, verifyToken, type AuthedUser } from "./auth";
 import { sheets } from "./sheetsApi";
@@ -13,16 +14,51 @@ import { canEditTask, canDeleteTask } from "./access";
 const app = express();
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: "1mb" }));
+app.use(cookieParser());
 
 const a =
   (fn: any) =>
   (req: any, res: any, next: any) =>
     Promise.resolve(fn(req, res, next)).catch(next);
 
+/* =========================
+   Sessão via Cookie HttpOnly
+   ========================= */
+const SESSION_COOKIE = "qco_session";
+
+function isProd() {
+  return String(process.env.NODE_ENV || "").toLowerCase() === "production";
+}
+
+function setSessionCookie(res: express.Response, token: string) {
+  res.cookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: isProd(), // Render = HTTPS
+    sameSite: "lax",
+    path: "/",
+    maxAge: 1000 * 60 * 60 * 12, // 12h (ajuste se quiser)
+  });
+}
+
+function clearSessionCookie(res: express.Response) {
+  res.clearCookie(SESSION_COOKIE, { path: "/" });
+}
+
+function getTokenFromReq(req: any) {
+  // 1) cookie (preferido)
+  const c = req.cookies?.[SESSION_COOKIE];
+  if (c) return String(c);
+
+  // 2) fallback: Authorization Bearer (mantém compatibilidade)
+  const auth = String(req.headers.authorization || "");
+  if (auth.startsWith("Bearer ")) return auth.slice(7);
+
+  return "";
+}
+
 function authMiddleware(req: any, res: any, next: any) {
   try {
-    const auth = String(req.headers.authorization || "");
-    const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+    const token = getTokenFromReq(req);
     if (!token) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
     req.user = verifyToken(token);
     next();
@@ -86,22 +122,41 @@ function normYm(input: any): string {
   return s;
 }
 
-/* ===== Datas: salvar como YYYY-MM-DD (sem timezone/ISO completo) ===== */
-function toYMD(value: any): string {
-  if (!value) return "";
-  // já vem YYYY-MM-DD
-  const s = String(value).trim();
+/* ===== Datas: salvar como YYYY-MM-DD (sem Z/UTC) ===== */
+function toYmdOrEmpty(v: any): string {
+  if (!v) return "";
+  const s = String(v).trim();
+  if (!s) return "";
+
+  // já está no formato YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
 
-  const d = new Date(String(value));
-  if (isNaN(d.getTime())) return "";
-  return d.toISOString().slice(0, 10);
+  // tenta parsear ISO e reduzir
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  }
+
+  return s.slice(0, 10);
 }
 
 /* ===== Regras de status (Concluído x Concluído em Atraso) ===== */
 function toDateOrNull(v: any) {
   if (!v) return null;
-  const d = new Date(String(v));
+  const s = String(v).trim();
+  if (!s) return null;
+
+  // interpreta YYYY-MM-DD como local (evita -1 dia)
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  const d = new Date(s);
   return isNaN(d.getTime()) ? null : d;
 }
 
@@ -114,7 +169,6 @@ function normalizeClear(patch: any) {
   if (patch.realizado === "CLEAR") patch.realizado = "";
 }
 
-// Força status correto quando estiver concluído
 function applyDoneLateRule(finalStatus: any, finalPrazo: any, finalRealizado: any) {
   if (!isConcluidoStatus(finalStatus)) return String(finalStatus || "");
 
@@ -125,22 +179,64 @@ function applyDoneLateRule(finalStatus: any, finalPrazo: any, finalRealizado: an
   return r > p ? "Concluído em Atraso" : "Concluído";
 }
 
+/* =========================
+   Static + rotas de páginas
+   ========================= */
 app.use("/public", express.static(path.join(process.cwd(), "public")));
 
-app.get("/", (_, res) => res.sendFile(path.join(process.cwd(), "public/login.html")));
-app.get("/calendar", (_, res) => res.sendFile(path.join(process.cwd(), "public/calendar.html")));
-app.get("/app", (_, res) => res.sendFile(path.join(process.cwd(), "public/app.html")));
-app.get("/admin", (_, res) => res.sendFile(path.join(process.cwd(), "public/admin.html")));
-app.get("/admin/users", (_, res) => res.sendFile(path.join(process.cwd(), "public/users.html")));
+/**
+ * ROTA VAZIA:
+ * - se logado -> /calendar
+ * - se não -> login.html
+ */
+app.get(
+  "/",
+  a(async (req: any, res: any) => {
+    const token = getTokenFromReq(req);
+    if (token) {
+      try {
+        verifyToken(token);
+        return res.redirect("/calendar");
+      } catch {
+        // cookie inválido/expirado
+        clearSessionCookie(res);
+      }
+    }
+    return res.sendFile(path.join(process.cwd(), "public/login.html"));
+  })
+);
 
-/* AUTH */
+app.get("/app", (_req, res) => res.sendFile(path.join(process.cwd(), "public/app.html")));
+app.get("/calendar", (_req, res) => res.sendFile(path.join(process.cwd(), "public/calendar.html")));
+app.get("/admin", (_req, res) => res.sendFile(path.join(process.cwd(), "public/admin.html")));
+app.get("/admin/users", (_req, res) => res.sendFile(path.join(process.cwd(), "public/users.html")));
+
+/* =========================
+   AUTH
+   ========================= */
 app.post(
   "/api/auth/login",
   a(async (req: any, res: any) => {
     const email = mustString(req.body.email, "Email");
     const password = mustString(req.body.password, "Senha");
+
     const out = await login(email, password);
-    res.json({ ok: true, ...out });
+    // out deve conter token e user (como você já tinha)
+    if (!out?.token) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    // cookie de sessão HttpOnly
+    setSessionCookie(res, out.token);
+
+    // devolve user pro front (token não precisa mais ir pro localStorage)
+    res.json({ ok: true, user: out.user });
+  })
+);
+
+app.post(
+  "/api/auth/logout",
+  a(async (_req: any, res: any) => {
+    clearSessionCookie(res);
+    res.json({ ok: true });
   })
 );
 
@@ -321,10 +417,11 @@ app.get(
 
     let visible = all.filter((t) => {
       if (me.role === "ADMIN") return true;
-      if (me.role === "LEADER") return String(t.area || "") === String(me.area || "");
+      if (me.role === "LEADER") return String((t as any).area || "") === String(me.area || "");
       return safeLowerEmail((t as any).responsavelEmail) === me.email;
     });
 
+    // tenta preencher responsavelNome
     try {
       const needs = visible.some((t) => !String((t as any).responsavelNome || "").trim());
       if (needs) {
@@ -363,8 +460,8 @@ app.post(
 
     const competenciaYm = normYm(req.body.competenciaYm || req.body.competencia);
 
-    const prazo = toYMD(req.body.prazo);
-    const realizado = toYMD(req.body.realizado);
+    const prazo = toYmdOrEmpty(req.body.prazo);
+    const realizado = toYmdOrEmpty(req.body.realizado);
 
     const rawStatus = req.body.status || "";
     const finalStatus = applyDoneLateRule(rawStatus, prazo, realizado);
@@ -425,7 +522,7 @@ app.post(
       responsavelEmail: newEmail,
       responsavelNome: String(u?.nome || (cur as any).responsavelNome || ""),
       area: String(u?.area || (cur as any).area || me.area || ""),
-      prazo: toYMD((cur as any).prazo),
+      prazo: toYmdOrEmpty((cur as any).prazo),
       realizado: "",
       status: "Em Andamento",
       observacoes: (cur as any).observacoes || "",
@@ -453,6 +550,7 @@ app.put(
     const current = await getTaskByIdCached(id);
     if (!current) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
 
+    // USER: status/realizado/observacoes apenas
     if (me.role === "USER") {
       if (safeLowerEmail((current as any).responsavelEmail) !== me.email) {
         return res.status(403).json({ ok: false, error: "FORBIDDEN" });
@@ -468,12 +566,11 @@ app.put(
       }
 
       normalizeClear(patch);
+      if (patch.realizado !== undefined) patch.realizado = toYmdOrEmpty(patch.realizado);
 
-      if (patch.realizado !== undefined && patch.realizado !== "") patch.realizado = toYMD(patch.realizado);
-
-      const finalPrazo = String((current as any).prazo || "");
-      const finalRealizado = patch.realizado !== undefined ? patch.realizado : String((current as any).realizado || "");
-      const finalStatusRaw = patch.status !== undefined ? patch.status : String((current as any).status || "");
+      const finalPrazo = (current as any).prazo || "";
+      const finalRealizado = patch.realizado !== undefined ? patch.realizado : (current as any).realizado || "";
+      const finalStatusRaw = patch.status !== undefined ? patch.status : (current as any).status || "";
       patch.status = applyDoneLateRule(finalStatusRaw, finalPrazo, finalRealizado);
 
       const updated = await sheets.updateTask(id, patch);
@@ -481,17 +578,18 @@ app.put(
       return res.json({ ok: true, task: updated });
     }
 
+    // LEADER/ADMIN
     const patch: any = { ...req.body, updatedAt: nowIso(), updatedBy: me.email };
     normalizeClear(patch);
+
+    if (patch.prazo !== undefined) patch.prazo = toYmdOrEmpty(patch.prazo);
+    if (patch.realizado !== undefined) patch.realizado = toYmdOrEmpty(patch.realizado);
 
     if (patch.competenciaYm || patch.competencia) {
       const ym = normYm(patch.competenciaYm || patch.competencia);
       patch.competenciaYm = ym;
       patch.competencia = ym;
     }
-
-    if (patch.prazo !== undefined) patch.prazo = toYMD(patch.prazo);
-    if (patch.realizado !== undefined && patch.realizado !== "") patch.realizado = toYMD(patch.realizado);
 
     if (patch.responsavelEmail) {
       const newEmail = safeLowerEmail(patch.responsavelEmail);
@@ -509,9 +607,9 @@ app.put(
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
 
-    const finalPrazo = patch.prazo !== undefined ? patch.prazo : String((current as any).prazo || "");
-    const finalRealizado = patch.realizado !== undefined ? patch.realizado : String((current as any).realizado || "");
-    const finalStatusRaw = patch.status !== undefined ? patch.status : String((current as any).status || "");
+    const finalPrazo = patch.prazo !== undefined ? patch.prazo : (current as any).prazo || "";
+    const finalRealizado = patch.realizado !== undefined ? patch.realizado : (current as any).realizado || "";
+    const finalStatusRaw = patch.status !== undefined ? patch.status : (current as any).status || "";
     patch.status = applyDoneLateRule(finalStatusRaw, finalPrazo, finalRealizado);
 
     const updated = await sheets.updateTask(id, patch);
@@ -538,6 +636,7 @@ app.delete(
   })
 );
 
+/* handler de erro */
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error("SERVER_ERROR:", err);
   res.status(500).json({ ok: false, error: err?.message || "SERVER_ERROR" });

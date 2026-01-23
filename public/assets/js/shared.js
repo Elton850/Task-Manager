@@ -2,27 +2,30 @@ function getToken() {
   return sessionStorage.getItem("token") || "";
 }
 
-async function api(path, options = {}) {
-  const token = getToken();
-  const res = await fetch(path, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
-    },
+async function api(url, opt = {}) {
+  const headers = Object.assign({ "Content-Type": "application/json" }, opt.headers || {});
+  const r = await fetch(url, {
+    ...opt,
+    headers,
+    credentials: "include", // <<< CRÍTICO: envia cookie HttpOnly
   });
 
-  const text = await res.text();
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { ok: false, error: "Resposta inválida do servidor", raw: text.slice(0, 200) };
+  let data = null;
+  try { data = await r.json(); } catch { data = { ok: false, error: "INVALID_JSON" }; }
+
+  if (r.status === 401) {
+    // sem sessão -> força login
+    location.href = "/";
+    return { ok: false, error: "UNAUTHORIZED" };
   }
+  return data;
 }
 
-function logout() {
-  sessionStorage.removeItem("token");
+async function logout() {
+  try {
+    await api("/api/auth/logout", { method: "POST" });
+  } catch {}
+  sessionStorage.removeItem("token"); // pode manter, não atrapalha
   window.location.href = "/";
 }
 
