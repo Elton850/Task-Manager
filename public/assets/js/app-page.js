@@ -809,8 +809,20 @@ function closeModal() {
 async function saveTask() {
   $("mHint").textContent = "Salvando...";
 
- if (me.role === "USER") {
-    // 1) se estiver editando uma task existente: continua só OBS
+  // helper: garante YYYY-MM-DD (sem timezone)
+  const ymd = (v) => {
+    const s = String(v || "").trim();
+    if (!s) return "";
+    // date input já vem YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    // datetime-local vem YYYY-MM-DDTHH:mm
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
+    return s;
+  };
+
+  // ===== USER =====
+  if (me.role === "USER") {
+    // EDIT: USER só altera OBS
     if (editingId) {
       const payload = { observacoes: ($("mObs").value || "").trim() };
       const res = await api(`/api/tasks/${editingId}`, { method: "PUT", body: JSON.stringify(payload) });
@@ -821,17 +833,11 @@ async function saveTask() {
       return;
     }
 
-    // 2) criação nova (POST) com rules já aplicadas no select
+    // NEW: USER cria task respeitando regras
     const competenciaYm = `${$("mCompAno").value}-${$("mCompMes").value}`;
     const recorrencia = $("mRecorrencia").value || "";
     const tipo = $("mTipo").value || "";
     const atividade = ($("mAtividade").value || "").trim();
-    const prazo = $("mPrazo").value || "";
-    const observacoes = ($("mObs").value || "").trim();
-
-    if (!recorrencia) { $("mHint").textContent = "Selecione a recorrência."; return; }
-    if (!tipo) { $("mHint").textContent = "Selecione o tipo."; return; }
-    if (!atividade) { $("mHint").textContent = "Atividade é obrigatória."; return; }
 
     const payload = {
       competenciaYm,
@@ -840,10 +846,14 @@ async function saveTask() {
       status: "Em Andamento",
       responsavelEmail: me.email,
       atividade,
-      prazo,
+      prazo: ymd($("mPrazo").value),
       realizado: "",
-      observacoes,
+      observacoes: ($("mObs").value || "").trim(),
     };
+
+    if (!payload.recorrencia) { $("mHint").textContent = "Selecione a recorrência."; return; }
+    if (!payload.tipo) { $("mHint").textContent = "Selecione o tipo."; return; }
+    if (!payload.atividade) { $("mHint").textContent = "Atividade é obrigatória."; return; }
 
     const res = await api(`/api/tasks`, { method: "POST", body: JSON.stringify(payload) });
     if (!res.ok) { $("mHint").textContent = res.error || "Erro"; return; }
@@ -854,6 +864,34 @@ async function saveTask() {
     renderFromLocal();
     return;
   }
+
+  // ===== ADMIN / LEADER =====
+  const competenciaYm = `${$("mCompAno").value}-${$("mCompMes").value}`;
+
+  const payload = {
+    competenciaYm,
+    recorrencia: $("mRecorrencia").value || "",
+    tipo: $("mTipo").value || "",
+    status: $("mStatus").value || "",
+    responsavelEmail: $("mResp").value || "",
+    atividade: ($("mAtividade").value || "").trim(),
+    prazo: ymd($("mPrazo").value),
+    realizado: ymd($("mRealizado").value),
+    observacoes: ($("mObs").value || "").trim(),
+  };
+
+  if (!payload.atividade) { $("mHint").textContent = "Atividade é obrigatória."; return; }
+
+  const res = editingId
+    ? await api(`/api/tasks/${editingId}`, { method: "PUT", body: JSON.stringify(payload) })
+    : await api(`/api/tasks`, { method: "POST", body: JSON.stringify(payload) });
+
+  if (!res.ok) { $("mHint").textContent = res.error || "Erro"; return; }
+
+  closeModal();
+  if (res.task) upsertLocalTask(res.task);
+  else await loadTasks();
+  renderFromLocal();
 }
 
 async function clearRealizado() {

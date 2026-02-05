@@ -3,6 +3,7 @@ const SHEETS = {
   TASKS: 'TASKS',
   LOOKUPS: 'LOOKUPS',
   LOGS: 'LOGS',
+  RULES: 'RULES',
 };
 
 function doGet() {
@@ -55,6 +56,12 @@ function doPost(e) {
 
       case 'lookups.rename':
         return _json({ ok: true, lookups: lookupsRename(body.category, body.oldValue, body.newValue, body.actorEmail) });
+
+      case 'rules.getByArea':
+        return _json({ ok: true, rule: rulesGetByArea(body.area) });
+
+      case 'rules.upsert':
+        return _json({ ok: true, rule: rulesUpsert(body.rule, body.actorEmail) });
 
       default:
         return _json({ ok: false, error: 'Unknown action' }, 400);
@@ -417,4 +424,85 @@ function tasksSoftDelete(id, deletedBy) {
   }
 
   return { ...before, ...patch };
+}
+
+/* RULES */
+function _normCsvList(s) {
+  return String(s || '')
+    .split(',')
+    .map(x => String(x).trim())
+    .filter(Boolean);
+}
+
+function rulesGetByArea(area) {
+  const a = String(area || '').trim();
+  if (!a) return { area: '', allowedRecorrencias: [] };
+
+  const sh = _sheet(SHEETS.RULES);
+  const { headers, rows } = _readAll(sh);
+  const objs = _rowsToObjects(headers, rows);
+
+  const found = objs.find(r => String(r.area || '').trim() === a);
+  if (!found) return { area: a, allowedRecorrencias: [] };
+
+  return {
+    area: a,
+    allowedRecorrencias: _normCsvList(found.allowedRecorrencias),
+    updatedAt: String(found.updatedAt || ''),
+    updatedBy: String(found.updatedBy || ''),
+  };
+}
+
+function rulesUpsert(rule, actorEmail) {
+  const area = String(rule?.area || '').trim();
+  if (!area) throw new Error('area obrigatória');
+
+  const allowed = Array.isArray(rule?.allowedRecorrencias)
+    ? rule.allowedRecorrencias.map(x => String(x).trim()).filter(Boolean)
+    : _normCsvList(rule?.allowedRecorrencias);
+
+  const sh = _sheet(SHEETS.RULES);
+  const map = _headerMap(sh);
+  const { headers, rows } = _readAll(sh);
+  const objs = _rowsToObjects(headers, rows);
+
+  const idx = objs.findIndex(r => String(r.area || '').trim() === area);
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+
+  const now = new Date();
+
+  try {
+    if (idx >= 0) {
+      const row = idx + 2;
+      const before = objs[idx];
+
+      if (map.allowedRecorrencias) sh.getRange(row, map.allowedRecorrencias).setValue(allowed.join(','));
+      if (map.updatedAt) sh.getRange(row, map.updatedAt).setValue(now);
+      if (map.updatedBy) sh.getRange(row, map.updatedBy).setValue(String(actorEmail || ''));
+
+      _log(actorEmail || 'system', 'RULE_UPDATE', 'RULE', area, before, {
+        ...before,
+        allowedRecorrencias: allowed.join(','),
+        updatedAt: now,
+        updatedBy: String(actorEmail || ''),
+      });
+
+      return rulesGetByArea(area);
+    }
+
+    const rowObj = {
+      area,
+      allowedRecorrencias: allowed.join(','),
+      updatedAt: now,
+      updatedBy: String(actorEmail || ''),
+    };
+
+    sh.appendRow(headers.map(h => rowObj[h] !== undefined ? rowObj[h] : ''));
+    _log(actorEmail || 'system', 'RULE_CREATE', 'RULE', area, null, rowObj);
+
+    return rulesGetByArea(area);
+  } finally {
+    lock.releaseLock();
+  }
 }
