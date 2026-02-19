@@ -1,24 +1,32 @@
 export type Role = "USER" | "LEADER" | "ADMIN";
 
-export type UserRow = {
+export interface Tenant {
+  id: string;
+  slug: string;
+  name: string;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface UserRow {
+  id: string;
+  tenantId: string;
   email: string;
   nome: string;
   role: Role;
   area: string;
-  active: string | boolean;
-  canDelete: string | boolean;
-
-  passwordHash?: string;
-
-  // reset / primeiro acesso
-  mustChangePassword?: string | boolean;
+  active: boolean;
+  canDelete: boolean;
+  passwordHash: string;
+  mustChangePassword: boolean;
   resetCodeHash?: string;
   resetCodeExpiresAt?: string;
-};
+  createdAt: string;
+}
 
-export type TaskRow = {
+export interface TaskRow {
   id: string;
-  competencia: string;
+  tenantId: string;
   competenciaYm: string;
   recorrencia: string;
   tipo: string;
@@ -34,8 +42,47 @@ export type TaskRow = {
   createdBy: string;
   updatedAt: string;
   updatedBy: string;
-  deletedAt: string;
-  deletedBy: string;
-};
+  deletedAt?: string;
+  deletedBy?: string;
+}
+
+export interface LookupRow {
+  id: string;
+  tenantId: string;
+  category: string;
+  value: string;
+  orderIndex: number;
+  createdAt: string;
+}
+
+export interface RuleRow {
+  id: string;
+  tenantId: string;
+  area: string;
+  allowedRecorrencias: string[];
+  updatedAt: string;
+  updatedBy: string;
+}
 
 export type Lookups = Record<string, string[]>;
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  nome: string;
+  role: Role;
+  area: string;
+  canDelete: boolean;
+  tenantId: string;
+}
+
+// Express Request augmentation
+declare global {
+  namespace Express {
+    interface Request {
+      user?: AuthUser;
+      tenantId?: string;
+      tenant?: Tenant;
+    }
+  }
+}

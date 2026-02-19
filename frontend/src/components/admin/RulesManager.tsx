@@ -1,0 +1,111 @@
+import React, { useState, useEffect } from "react";
+import { Save, CheckSquare, Square } from "lucide-react";
+import Button from "@/components/ui/Button";
+import { rulesApi } from "@/services/api";
+import { useToast } from "@/contexts/ToastContext";
+import { useAuth } from "@/contexts/AuthContext";
+import type { Rule, Lookups } from "@/types";
+
+interface RulesManagerProps {
+  rules: Rule[];
+  lookups: Lookups;
+  onRefresh: () => void;
+}
+
+export default function RulesManager({ rules, lookups, onRefresh }: RulesManagerProps) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [selected, setSelected] = useState<Record<string, Set<string>>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+
+  const areas = user?.role === "ADMIN"
+    ? (lookups.AREA || [])
+    : [user?.area || ""];
+
+  const recorrencias = lookups.RECORRENCIA || [];
+
+  useEffect(() => {
+    const init: Record<string, Set<string>> = {};
+    for (const area of areas) {
+      const rule = rules.find(r => r.area === area);
+      init[area] = new Set(rule?.allowedRecorrencias || []);
+    }
+    setSelected(init);
+  }, [rules, areas.join(",")]);
+
+  const toggleRecorrencia = (area: string, rec: string) => {
+    setSelected(prev => {
+      const set = new Set(prev[area] || []);
+      if (set.has(rec)) set.delete(rec);
+      else set.add(rec);
+      return { ...prev, [area]: set };
+    });
+  };
+
+  const handleSave = async (area: string) => {
+    setSaving(area);
+    try {
+      const allowed = Array.from(selected[area] || []);
+      await rulesApi.save(area, allowed);
+      onRefresh();
+      toast(`Regras de "${area}" salvas com sucesso`, "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Erro ao salvar regras", "error");
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {areas.map(area => (
+        <div key={area} className="p-4 rounded-xl bg-slate-800/50 border border-slate-700/60">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-slate-200">{area}</h3>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">
+                {(selected[area]?.size || 0)} recorrência{(selected[area]?.size || 0) !== 1 ? "s" : ""} permitida{(selected[area]?.size || 0) !== 1 ? "s" : ""}
+              </span>
+              <Button
+                size="sm"
+                onClick={() => handleSave(area)}
+                loading={saving === area}
+                icon={<Save size={13} />}
+              >
+                Salvar
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {recorrencias.map(rec => {
+              const isSelected = selected[area]?.has(rec) || false;
+              return (
+                <button
+                  key={rec}
+                  onClick={() => toggleRecorrencia(area, rec)}
+                  className={`
+                    flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all
+                    ${isSelected
+                      ? "bg-brand-600/20 text-brand-300 border border-brand-500/40"
+                      : "bg-slate-800 text-slate-500 border border-slate-600/40 hover:border-slate-500 hover:text-slate-400"
+                    }
+                  `}
+                >
+                  {isSelected ? <CheckSquare size={12} /> : <Square size={12} />}
+                  {rec}
+                </button>
+              );
+            })}
+          </div>
+
+          {(selected[area]?.size || 0) === 0 && (
+            <p className="text-xs text-amber-400 mt-2">
+              Nenhuma recorrência selecionada. Usuários desta área não poderão criar tarefas.
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}

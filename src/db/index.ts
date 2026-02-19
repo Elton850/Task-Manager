@@ -1,0 +1,99 @@
+// Uses Node.js built-in SQLite (available since Node.js v22.5.0)
+// No native compilation needed — works out of the box
+import { DatabaseSync } from "node:sqlite";
+import path from "path";
+import fs from "fs";
+
+const DB_PATH = path.resolve(process.cwd(), "data", "taskmanager.db");
+
+// Ensure data directory exists
+const dataDir = path.dirname(DB_PATH);
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+
+const db = new DatabaseSync(DB_PATH);
+
+// Performance optimizations
+db.exec("PRAGMA journal_mode = WAL");
+db.exec("PRAGMA foreign_keys = ON");
+db.exec("PRAGMA synchronous = NORMAL");
+
+// Create schema
+db.exec(`
+  CREATE TABLE IF NOT EXISTS tenants (
+    id          TEXT PRIMARY KEY,
+    slug        TEXT UNIQUE NOT NULL,
+    name        TEXT NOT NULL,
+    active      INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS users (
+    id                    TEXT PRIMARY KEY,
+    tenant_id             TEXT NOT NULL REFERENCES tenants(id),
+    email                 TEXT NOT NULL,
+    nome                  TEXT NOT NULL,
+    role                  TEXT NOT NULL DEFAULT 'USER' CHECK (role IN ('USER','LEADER','ADMIN')),
+    area                  TEXT NOT NULL DEFAULT '',
+    active                INTEGER NOT NULL DEFAULT 1,
+    can_delete            INTEGER NOT NULL DEFAULT 0,
+    password_hash         TEXT NOT NULL DEFAULT '',
+    must_change_password  INTEGER NOT NULL DEFAULT 1,
+    reset_code_hash       TEXT,
+    reset_code_expires_at TEXT,
+    created_at            TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(tenant_id, email)
+  );
+
+  CREATE TABLE IF NOT EXISTS tasks (
+    id                TEXT PRIMARY KEY,
+    tenant_id         TEXT NOT NULL REFERENCES tenants(id),
+    competencia_ym    TEXT NOT NULL,
+    recorrencia       TEXT NOT NULL,
+    tipo              TEXT NOT NULL,
+    atividade         TEXT NOT NULL,
+    responsavel_email TEXT NOT NULL,
+    responsavel_nome  TEXT NOT NULL,
+    area              TEXT NOT NULL,
+    prazo             TEXT,
+    realizado         TEXT,
+    status            TEXT NOT NULL DEFAULT 'Em Andamento',
+    observacoes       TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    created_by        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_by        TEXT NOT NULL,
+    deleted_at        TEXT,
+    deleted_by        TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS lookups (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id),
+    category    TEXT NOT NULL,
+    value       TEXT NOT NULL,
+    order_index INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(tenant_id, category, value)
+  );
+
+  CREATE TABLE IF NOT EXISTS rules (
+    id                    TEXT PRIMARY KEY,
+    tenant_id             TEXT NOT NULL REFERENCES tenants(id),
+    area                  TEXT NOT NULL,
+    allowed_recorrencias  TEXT NOT NULL DEFAULT '[]',
+    updated_at            TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_by            TEXT NOT NULL,
+    UNIQUE(tenant_id, area)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_tasks_tenant    ON tasks(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_tasks_area      ON tasks(tenant_id, area);
+  CREATE INDEX IF NOT EXISTS idx_tasks_resp      ON tasks(tenant_id, responsavel_email);
+  CREATE INDEX IF NOT EXISTS idx_tasks_ym        ON tasks(tenant_id, competencia_ym);
+  CREATE INDEX IF NOT EXISTS idx_users_tenant    ON users(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_lookups_tenant  ON lookups(tenant_id, category);
+`);
+
+export default db;

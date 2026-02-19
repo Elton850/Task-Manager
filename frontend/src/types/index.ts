@@ -1,0 +1,114 @@
+export type Role = "USER" | "LEADER" | "ADMIN";
+
+export interface Tenant {
+  id: string;
+  slug: string;
+  name: string;
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  nome: string;
+  role: Role;
+  area: string;
+  canDelete: boolean;
+  tenantId: string;
+}
+
+export interface User {
+  id: string;
+  tenantId: string;
+  email: string;
+  nome: string;
+  role: Role;
+  area: string;
+  active: boolean;
+  canDelete: boolean;
+  mustChangePassword: boolean;
+  createdAt: string;
+}
+
+export interface Task {
+  id: string;
+  tenantId: string;
+  competenciaYm: string;
+  recorrencia: string;
+  tipo: string;
+  atividade: string;
+  responsavelEmail: string;
+  responsavelNome: string;
+  area: string;
+  prazo: string;
+  realizado: string;
+  status: string;
+  observacoes: string;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export interface LookupItem {
+  id: string;
+  category: string;
+  value: string;
+  orderIndex: number;
+}
+
+export type Lookups = Record<string, string[]>;
+
+export interface Rule {
+  id: string;
+  tenantId: string;
+  area: string;
+  allowedRecorrencias: string[];
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export interface TaskFilters {
+  search: string;
+  status: string;
+  area: string;
+  responsavel: string;
+  competenciaYm: string;
+}
+
+export interface PerformanceFilters {
+  from: string;
+  to: string;
+  status: string;
+  responsavel: string;
+  recorrencia: string;
+  tipo: string;
+}
+
+export interface ResponsavelStats {
+  email: string;
+  nome: string;
+  total: number;
+  concluido: number;
+  emAndamento: number;
+  emAtraso: number;
+  concluidoEmAtraso: number;
+}
+
+export interface PerformanceSummary {
+  total: number;
+  emAndamento: number;
+  concluido: number;
+  emAtraso: number;
+  concluidoEmAtraso: number;
+  byResponsavel: ResponsavelStats[];
+  lastUpdated: string;
+}
+
+export const STATUS_COLORS: Record<string, string> = {
+  "Em Andamento": "blue",
+  "Concluído": "green",
+  "Em Atraso": "red",
+  "Concluído em Atraso": "amber",
+};
+
+export const STATUS_LIST = ["Em Andamento", "Concluído", "Em Atraso", "Concluído em Atraso"];
