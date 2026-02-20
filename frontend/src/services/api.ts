@@ -130,7 +130,14 @@ export const authApi = {
 
   logout: () => post<{ ok: boolean }>("/auth/logout"),
 
-  me: () => get<{ user: AuthUser; tenant: Tenant; isImpersonating?: boolean }>("/auth/me"),
+  me: () =>
+    get<{
+      user: AuthUser;
+      tenant: Tenant;
+      isImpersonating?: boolean;
+      lastLoginAt?: string | null;
+      lastLogoutAt?: string | null;
+    }>("/auth/me"),
 
   /** Admin mestre: visualizar como outro usuário (somente leitura). Retorna user/tenant do usuário escolhido. */
   impersonate: (userId: string) =>

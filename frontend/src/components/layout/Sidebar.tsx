@@ -15,6 +15,17 @@ import { useAuth } from "@/contexts/AuthContext";
 import Badge, { getRoleVariant } from "@/components/ui/Badge";
 import TenantLogo from "@/components/ui/TenantLogo";
 
+function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "—";
+  }
+}
+
 interface SidebarProps {
   open: boolean;
   onToggle: () => void;
@@ -42,7 +53,7 @@ const navItems: NavItem[] = [
 ];
 
 export default function Sidebar({ open, onToggle }: SidebarProps) {
-  const { user, tenant, logout } = useAuth();
+  const { user, tenant, logout, lastLoginAt, lastLogoutAt } = useAuth();
   const basePath = useBasePath();
   const isSystemAdmin = tenant?.slug === "system" && user?.role === "ADMIN";
 
@@ -121,6 +132,16 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
                 {user.role}
               </Badge>
             </div>
+            {(lastLoginAt || lastLogoutAt) && (
+              <div className="mt-2 px-3 py-2 rounded-lg bg-slate-100/80 text-xs text-slate-600 space-y-1">
+                <p title="Último acesso ao sistema">
+                  <span className="font-medium">Último login:</span> {formatDateTime(lastLoginAt)}
+                </p>
+                <p title="Última saída do sistema">
+                  <span className="font-medium">Último logout:</span> {formatDateTime(lastLogoutAt)}
+                </p>
+              </div>
+            )}
             <button
               onClick={logout}
               className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-all"

@@ -77,12 +77,14 @@ router.post("/login", async (req: Request, res: Response): Promise<void> => {
     const user = rowToAuthUser(row);
     const token = signToken(user);
 
-    // Registrar evento de login para métricas
+    // Registrar evento de login e atualizar último login
+    const nowIsoStr = nowIso();
     try {
       const eventId = uuidv4();
       db.prepare(
         "INSERT INTO login_events (id, tenant_id, user_id, logged_at) VALUES (?, ?, ?, ?)"
-      ).run(eventId, tenantId, row.id, new Date().toISOString());
+      ).run(eventId, tenantId, row.id, nowIsoStr);
+      db.prepare("UPDATE users SET last_login_at = ? WHERE id = ?").run(nowIsoStr, row.id);
     } catch {
       // Não falhar o login se o registro falhar
     }
@@ -197,12 +199,14 @@ router.post("/reset", async (req: Request, res: Response): Promise<void> => {
     const user = rowToAuthUser(updatedRow);
     const token = signToken(user);
 
-    // Registrar evento de login (reset de senha concluído = novo acesso)
+    // Registrar evento de login e último login (reset de senha concluído = novo acesso)
+    const nowIsoReset = nowIso();
     try {
       const eventId = uuidv4();
       db.prepare(
         "INSERT INTO login_events (id, tenant_id, user_id, logged_at) VALUES (?, ?, ?, ?)"
-      ).run(eventId, tenantId, updatedRow.id, new Date().toISOString());
+      ).run(eventId, tenantId, updatedRow.id, nowIsoReset);
+      db.prepare("UPDATE users SET last_login_at = ? WHERE id = ?").run(nowIsoReset, updatedRow.id);
     } catch {
       // Não falhar se o registro falhar
     }
@@ -224,19 +228,40 @@ router.post("/reset", async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// POST /api/auth/logout
-router.post("/logout", (_req: Request, res: Response): void => {
+// POST /api/auth/logout — req.user preenchido por apiAuthContext quando o token é válido
+router.post("/logout", (req: Request, res: Response): void => {
+  if (req.user?.id) {
+    try {
+      db.prepare("UPDATE users SET last_logout_at = ? WHERE id = ?").run(nowIso(), req.user.id);
+    } catch {
+      // Não falhar o logout se o registro falhar
+    }
+  }
   res.clearCookie("auth_token");
   res.clearCookie("csrf_token");
   res.json({ ok: true });
 });
 
-// GET /api/auth/me
+// GET /api/auth/me — inclui último login e logout para exibição na área do usuário
 router.get("/me", requireAuth, (req: Request, res: Response): void => {
+  let lastLoginAt: string | null = null;
+  let lastLogoutAt: string | null = null;
+  try {
+    const row = db.prepare("SELECT last_login_at, last_logout_at FROM users WHERE id = ?")
+      .get(req.user!.id) as { last_login_at: string | null; last_logout_at: string | null } | undefined;
+    if (row) {
+      lastLoginAt = row.last_login_at ?? null;
+      lastLogoutAt = row.last_logout_at ?? null;
+    }
+  } catch {
+    // Manter null em caso de erro
+  }
   res.json({
     user: req.user,
     tenant: req.tenant,
     isImpersonating: !!req.impersonating,
+    lastLoginAt,
+    lastLogoutAt,
   });
 });
 

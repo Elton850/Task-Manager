@@ -8,6 +8,10 @@ interface AuthContextValue {
   loading: boolean;
   /** True quando o admin mestre está visualizando como outro usuário (somente leitura). */
   isImpersonating: boolean;
+  /** Data/hora do último login (ISO). */
+  lastLoginAt: string | null;
+  /** Data/hora do último logout (ISO). */
+  lastLogoutAt: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: AuthUser | null) => void;
@@ -26,6 +30,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [loading, setLoading] = useState(true);
   const [isImpersonating, setIsImpersonating] = useState(false);
+  const [lastLoginAt, setLastLoginAt] = useState<string | null>(null);
+  const [lastLogoutAt, setLastLogoutAt] = useState<string | null>(null);
 
   const checkSession = useCallback(async () => {
     try {
@@ -34,10 +40,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(data.user);
       setTenant(data.tenant);
       setIsImpersonating(!!data.isImpersonating);
+      setLastLoginAt(data.lastLoginAt ?? null);
+      setLastLogoutAt(data.lastLogoutAt ?? null);
     } catch {
       setUser(null);
       setTenant(null);
       setIsImpersonating(false);
+      setLastLoginAt(null);
+      setLastLogoutAt(null);
     } finally {
       setLoading(false);
     }
@@ -53,6 +63,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(data.user);
     setTenant(data.tenant);
     setIsImpersonating(!!data.isImpersonating);
+    setLastLoginAt(data.lastLoginAt ?? null);
+    setLastLogoutAt(data.lastLogoutAt ?? null);
   }, []);
 
   const refreshSession = useCallback(async () => {
@@ -60,6 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(data.user);
     setTenant(data.tenant);
     setIsImpersonating(!!data.isImpersonating);
+    setLastLoginAt(data.lastLoginAt ?? null);
+    setLastLogoutAt(data.lastLogoutAt ?? null);
   }, []);
 
   const logout = useCallback(async () => {
@@ -89,6 +103,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tenant,
       loading,
       isImpersonating,
+      lastLoginAt,
+      lastLogoutAt,
       login,
       logout,
       setUser,
@@ -96,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       startImpersonation,
       stopImpersonation,
     }),
-    [user, tenant, loading, isImpersonating, login, logout, refreshSession, startImpersonation, stopImpersonation]
+    [user, tenant, loading, isImpersonating, lastLoginAt, lastLogoutAt, login, logout, refreshSession, startImpersonation, stopImpersonation]
   );
 
   return (

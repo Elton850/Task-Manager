@@ -76,6 +76,17 @@ function getYmOptions() {
   return options;
 }
 
+function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "—";
+  }
+}
+
 export default function UsersPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -704,6 +715,12 @@ export default function UsersPage() {
                     Logins (período)
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                    Último login
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                    Último logout
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                     Ações
                   </th>
                 </tr>
@@ -778,6 +795,12 @@ export default function UsersPage() {
                           ? loginCounts[u.id] ?? 0
                           : "—"}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600" title={u.lastLoginAt ?? undefined}>
+                      {formatDateTime(u.lastLoginAt)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600" title={u.lastLogoutAt ?? undefined}>
+                      {formatDateTime(u.lastLogoutAt)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">

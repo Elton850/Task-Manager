@@ -41,6 +41,10 @@ export interface User {
   /** Preenchido quando Admin Mestre lista usuários de várias empresas */
   tenantSlug?: string;
   tenantName?: string;
+  /** Data/hora do último login (ISO). */
+  lastLoginAt?: string | null;
+  /** Data/hora do último logout (ISO). */
+  lastLogoutAt?: string | null;
 }
 
 export interface Task {

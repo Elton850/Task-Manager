@@ -151,5 +151,18 @@ try {
   // ignorar
 }
 
+// Migração: último login e logout por usuário (para log na área do usuário e na página de controle)
+try {
+  const userCols = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
+  if (!userCols.some((c) => c.name === "last_login_at")) {
+    db.exec("ALTER TABLE users ADD COLUMN last_login_at TEXT");
+  }
+  if (!userCols.some((c) => c.name === "last_logout_at")) {
+    db.exec("ALTER TABLE users ADD COLUMN last_logout_at TEXT");
+  }
+} catch {
+  // ignorar
+}
+
 export default db;
 export { SYSTEM_TENANT_ID };

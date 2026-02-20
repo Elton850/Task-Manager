@@ -25,6 +25,8 @@ interface UserDbRow {
   can_delete: number;
   must_change_password: number;
   created_at: string;
+  last_login_at?: string | null;
+  last_logout_at?: string | null;
 }
 
 function rowToUser(row: UserDbRow, tenantSlug?: string, tenantName?: string) {
@@ -39,6 +41,8 @@ function rowToUser(row: UserDbRow, tenantSlug?: string, tenantName?: string) {
     canDelete: row.can_delete === 1,
     mustChangePassword: row.must_change_password === 1,
     createdAt: row.created_at,
+    lastLoginAt: row.last_login_at ?? undefined,
+    lastLogoutAt: row.last_logout_at ?? undefined,
   };
   if (tenantSlug !== undefined) (u as Record<string, unknown>).tenantSlug = tenantSlug;
   if (tenantName !== undefined) (u as Record<string, unknown>).tenantName = tenantName;
