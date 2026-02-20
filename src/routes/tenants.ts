@@ -1,18 +1,28 @@
 import { Router, Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import db from "../db";
 import { requireAuth } from "../middleware/auth";
 import { nowIso } from "../utils";
 
 const router = Router();
 
+/** Comparação segura contra timing attack para chave super-admin. */
+function secureCompare(a: string, b: string): boolean {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const bufA = Buffer.from(a, "utf8");
+  const bufB = Buffer.from(b, "utf8");
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 // Super-admin key for tenant management (set in env)
 function checkSuperAdmin(req: Request, res: Response): boolean {
-  const key = req.headers["x-super-admin-key"];
-  const expected = process.env.SUPER_ADMIN_KEY;
+  const key = (req.headers["x-super-admin-key"] as string) || "";
+  const expected = process.env.SUPER_ADMIN_KEY || "";
 
-  if (!expected || key !== expected) {
+  if (!expected || !secureCompare(key, expected)) {
     res.status(403).json({ error: "Acesso negado.", code: "FORBIDDEN" });
     return false;
   }

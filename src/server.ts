@@ -22,6 +22,15 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const IS_PROD = process.env.NODE_ENV === "production";
 
+// Validação de secrets em produção
+if (IS_PROD) {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || typeof secret !== "string" || secret.length < 32) {
+    console.error("Em produção, JWT_SECRET deve ter pelo menos 32 caracteres.");
+    process.exit(1);
+  }
+}
+
 // ── Security ──────────────────────────────────────────────────────────────────
 app.use(helmet({
   contentSecurityPolicy: {
@@ -34,6 +43,7 @@ app.use(helmet({
     },
   },
   crossOriginEmbedderPolicy: false,
+  hsts: IS_PROD ? { maxAge: 31536000, includeSubDomains: true } : false,
 }));
 
 // ── Core Middleware ────────────────────────────────────────────────────────────
@@ -41,29 +51,44 @@ app.use(cookieParser());
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ extended: false }));
 
-// ── CORS for development ───────────────────────────────────────────────────────
-if (!IS_PROD) {
-  app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    if (origin && (origin.includes("localhost:5173") || origin.includes("localhost:5174"))) {
-      res.setHeader("Access-Control-Allow-Origin", origin);
-      res.setHeader("Access-Control-Allow-Credentials", "true");
-      res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type,X-CSRF-Token,X-Tenant-Slug,X-Requested-With");
-    }
-    if (req.method === "OPTIONS") {
-      res.sendStatus(204);
-      return;
-    }
-    next();
-  });
-}
+// ── CORS (whitelist; nunca * com credentials) ───────────────────────────────────
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").map((o) => o.trim()).filter(Boolean);
+const devOrigins = ["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"];
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowed = IS_PROD ? ALLOWED_ORIGINS : devOrigins;
+  if (origin && allowed.some((o) => origin === o)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type,X-CSRF-Token,X-Tenant-Slug,X-Requested-With");
+  }
+  if (req.method === "OPTIONS") {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+});
 
 // ── Rate Limiting ─────────────────────────────────────────────────────────────
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   message: { error: "Muitas tentativas de login. Tente novamente em 15 minutos.", code: "RATE_LIMITED" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+const resetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: "Muitas tentativas de redefinição. Tente novamente em 15 minutos.", code: "RATE_LIMITED" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+const apiLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 120,
+  message: { error: "Muitas requisições. Tente novamente em breve.", code: "RATE_LIMITED" },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -83,6 +108,8 @@ app.use("/api", verifyCsrf);
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 app.use("/api/auth/login", loginLimiter);
+app.use("/api/auth/reset", resetLimiter);
+app.use("/api", apiLimiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/users", userRoutes);
@@ -110,13 +137,15 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: "Erro interno do servidor.", code: "INTERNAL" });
 });
 
-app.listen(PORT, () => {
-  console.log(`\n🚀 Task Manager v2.0 rodando em http://localhost:${PORT}`);
-  console.log(`   Modo: ${IS_PROD ? "produção" : "desenvolvimento"}`);
-  console.log(`   DB:   ${process.cwd()}/data/taskmanager.db`);
-  if (!IS_PROD) {
-    console.log(`   Frontend: http://localhost:5173`);
-  }
-});
+if (process.env.NODE_ENV !== "test") {
+  app.listen(PORT, () => {
+    console.log(`\n🚀 Task Manager v2.0 rodando em http://localhost:${PORT}`);
+    console.log(`   Modo: ${IS_PROD ? "produção" : "desenvolvimento"}`);
+    console.log(`   DB:   ${process.cwd()}/data/taskmanager.db`);
+    if (!IS_PROD) {
+      console.log(`   Frontend: http://localhost:5173`);
+    }
+  });
+}
 
 export default app;

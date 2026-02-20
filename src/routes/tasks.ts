@@ -434,6 +434,14 @@ router.post("/:id/duplicate", (req: Request, res: Response): void => {
 const MAX_EVIDENCE_SIZE = 10 * 1024 * 1024;
 const uploadsBaseDir = path.resolve(process.cwd(), "data", "uploads");
 
+const ALLOWED_MIME_TYPES = new Set([
+  "application/pdf", "application/octet-stream",
+  "image/jpeg", "image/png", "image/gif", "image/webp",
+  "text/plain", "text/csv",
+  "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+
 function sanitizeFileName(name: string): string {
   return name.replace(/[^\w.\-]/g, "_").slice(0, 120) || "arquivo";
 }
@@ -497,7 +505,11 @@ router.post("/:id/evidences", (req: Request, res: Response): void => {
     }
 
     const fileName = mustString(fileNameRaw, "Nome do arquivo");
-    const mimeType = optStr(mimeTypeRaw) || "application/octet-stream";
+    const mimeType = (optStr(mimeTypeRaw) || "application/octet-stream").toLowerCase().split(";")[0].trim();
+    if (!ALLOWED_MIME_TYPES.has(mimeType)) {
+      res.status(400).json({ error: "Tipo de arquivo não permitido.", code: "INVALID_MIME" });
+      return;
+    }
     const base64Payload = parseBase64Payload(mustString(contentBase64, "Conteúdo do arquivo"));
     const fileBuffer = Buffer.from(base64Payload, "base64");
 
@@ -582,12 +594,18 @@ router.get("/:id/evidences/:evidenceId/download", (req: Request, res: Response):
     }
 
     const absolutePath = path.resolve(process.cwd(), evidence.file_path);
+    const uploadsBase = path.resolve(process.cwd(), "data", "uploads");
+    if (!absolutePath.startsWith(uploadsBase + path.sep) && absolutePath !== uploadsBase) {
+      res.status(400).json({ error: "Caminho de arquivo inválido.", code: "INVALID_PATH" });
+      return;
+    }
     if (!fs.existsSync(absolutePath)) {
       res.status(404).json({ error: "Arquivo não encontrado no disco.", code: "FILE_NOT_FOUND" });
       return;
     }
 
     res.setHeader("Content-Type", evidence.mime_type || "application/octet-stream");
+    res.setHeader("X-Content-Type-Options", "nosniff");
     res.download(absolutePath, evidence.file_name);
   } catch {
     res.status(500).json({ error: "Erro ao baixar evidência.", code: "INTERNAL" });

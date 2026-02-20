@@ -20,10 +20,16 @@ export function verifyCsrf(req: Request, res: Response, next: NextFunction): voi
     return next();
   }
 
-  const cookieToken = req.cookies?.[CSRF_COOKIE];
-  const headerToken = req.headers[CSRF_HEADER];
+  const cookieToken = (req.cookies?.[CSRF_COOKIE] as string) || "";
+  const headerToken = (typeof req.headers[CSRF_HEADER] === "string" ? req.headers[CSRF_HEADER] : "") || "";
 
-  if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+  if (!cookieToken || !headerToken) {
+    res.status(403).json({ error: "Token CSRF inválido.", code: "CSRF_INVALID" });
+    return;
+  }
+  const bufA = Buffer.from(cookieToken, "utf8");
+  const bufB = Buffer.from(headerToken, "utf8");
+  if (bufA.length !== bufB.length || !crypto.timingSafeEqual(bufA, bufB)) {
     res.status(403).json({ error: "Token CSRF inválido.", code: "CSRF_INVALID" });
     return;
   }
