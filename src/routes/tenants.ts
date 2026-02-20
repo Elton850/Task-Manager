@@ -1,11 +1,17 @@
 import { Router, Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import db from "../db";
 import { requireAuth, requireRole, optionalAuth } from "../middleware/auth";
 import { nowIso } from "../utils";
 
 const router = Router();
+const uploadsBaseDir = path.resolve(process.cwd(), "data", "uploads");
+const TENANT_LOGOS_DIR = "tenants";
+const LOGO_MAX_SIZE = 2 * 1024 * 1024; // 2MB
+const LOGO_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
 const SYSTEM_TENANT_SLUG = "system";
 
@@ -50,12 +56,46 @@ function canManageTenants(req: Request, res: Response): boolean {
   return false;
 }
 
+// GET /api/tenants/logo/:slug — serve logo da empresa (público, para login e layout)
+router.get("/logo/:slug", (req: Request, res: Response): void => {
+  try {
+    const slug = (req.params.slug || "").trim().toLowerCase();
+    if (!slug) {
+      res.status(404).end();
+      return;
+    }
+    const row = db.prepare("SELECT id, logo_path FROM tenants WHERE slug = ?").get(slug) as { id: string; logo_path: string | null } | undefined;
+    if (!row || !row.logo_path) {
+      res.status(404).end();
+      return;
+    }
+    const absolutePath = path.resolve(process.cwd(), row.logo_path);
+    const allowedDir = path.resolve(uploadsBaseDir, TENANT_LOGOS_DIR);
+    if (!absolutePath.startsWith(allowedDir + path.sep) && absolutePath !== allowedDir) {
+      res.status(403).end();
+      return;
+    }
+    if (!fs.existsSync(absolutePath)) {
+      db.prepare("UPDATE tenants SET logo_path = NULL WHERE id = ?").run(row.id);
+      res.status(404).end();
+      return;
+    }
+    const ext = path.extname(absolutePath).toLowerCase();
+    const mime = ext === ".png" ? "image/png" : ext === ".gif" ? "image/gif" : ext === ".webp" ? "image/webp" : "image/jpeg";
+    res.setHeader("Content-Type", mime);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.sendFile(absolutePath);
+  } catch {
+    res.status(500).end();
+  }
+});
+
 // GET /api/tenants — list all tenants (administrador do sistema logado ou chave)
 router.get("/", optionalAuth, (req: Request, res: Response): void => {
   if (!canListTenants(req, res)) return;
   try {
-    const tenants = db.prepare("SELECT id, slug, name, active, created_at FROM tenants WHERE slug != ? ORDER BY name ASC").all(SYSTEM_TENANT_SLUG);
-    res.json({ tenants });
+    const tenants = db.prepare("SELECT id, slug, name, active, created_at, logo_path FROM tenants WHERE slug != ? ORDER BY name ASC").all(SYSTEM_TENANT_SLUG);
+    res.json({ tenants: tenants.map((t: { logo_path?: string | null }) => ({ ...t, hasLogo: !!t.logo_path })) });
   } catch {
     res.status(500).json({ error: "Erro ao buscar empresas.", code: "INTERNAL" });
   }
@@ -172,6 +212,71 @@ router.patch("/:id/toggle-active", optionalAuth, (req: Request, res: Response): 
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: "Erro.", code: "INTERNAL" });
+  }
+});
+
+// POST /api/tenants/:id/logo — upload logo (apenas admin mestre)
+router.post("/:id/logo", optionalAuth, (req: Request, res: Response): void => {
+  if (!canManageTenants(req, res)) return;
+  try {
+    const { id: tenantId } = req.params;
+    const tenant = db.prepare("SELECT id, slug, logo_path FROM tenants WHERE id = ? AND slug != ?").get(tenantId, SYSTEM_TENANT_SLUG) as { id: string; slug: string; logo_path: string | null } | undefined;
+    if (!tenant) {
+      res.status(404).json({ error: "Empresa não encontrada.", code: "NOT_FOUND" });
+      return;
+    }
+    const { fileName, mimeType, contentBase64 } = req.body || {};
+    const mime = (String(mimeType || "").toLowerCase().split(";")[0].trim()) || "image/jpeg";
+    if (!LOGO_MIMES.has(mime)) {
+      res.status(400).json({ error: "Use imagem JPEG, PNG, GIF ou WebP.", code: "INVALID_MIME" });
+      return;
+    }
+    const raw = (contentBase64 || "").trim();
+    const base64 = raw.includes("base64,") ? raw.slice(raw.indexOf("base64,") + 7) : raw;
+    const buffer = Buffer.from(base64, "base64");
+    if (!buffer.length) {
+      res.status(400).json({ error: "Arquivo inválido.", code: "INVALID_FILE" });
+      return;
+    }
+    if (buffer.length > LOGO_MAX_SIZE) {
+      res.status(400).json({ error: "Imagem deve ter no máximo 2MB.", code: "FILE_TOO_LARGE" });
+      return;
+    }
+    const ext = mime === "image/png" ? ".png" : mime === "image/gif" ? ".gif" : mime === "image/webp" ? ".webp" : ".jpg";
+    const logoDir = path.join(uploadsBaseDir, TENANT_LOGOS_DIR, tenantId);
+    fs.mkdirSync(logoDir, { recursive: true });
+    const logoFileName = `logo${ext}`;
+    const absolutePath = path.join(logoDir, logoFileName);
+    fs.writeFileSync(absolutePath, buffer);
+    const relativePath = path.relative(process.cwd(), absolutePath).replaceAll("\\", "/");
+    db.prepare("UPDATE tenants SET logo_path = ? WHERE id = ?").run(relativePath, tenantId);
+    res.json({ ok: true, logoPath: relativePath });
+  } catch {
+    res.status(500).json({ error: "Erro ao salvar logo.", code: "INTERNAL" });
+  }
+});
+
+// DELETE /api/tenants/:id/logo — remove logo (apenas admin mestre)
+router.delete("/:id/logo", optionalAuth, (req: Request, res: Response): void => {
+  if (!canManageTenants(req, res)) return;
+  try {
+    const { id: tenantId } = req.params;
+    const tenant = db.prepare("SELECT id, logo_path FROM tenants WHERE id = ?").get(tenantId) as { id: string; logo_path: string | null } | undefined;
+    if (!tenant) {
+      res.status(404).json({ error: "Empresa não encontrada.", code: "NOT_FOUND" });
+      return;
+    }
+    if (tenant.logo_path) {
+      const absolutePath = path.resolve(process.cwd(), tenant.logo_path);
+      const allowedDir = path.resolve(uploadsBaseDir, TENANT_LOGOS_DIR);
+      if (absolutePath.startsWith(allowedDir + path.sep) && fs.existsSync(absolutePath)) {
+        fs.unlinkSync(absolutePath);
+      }
+      db.prepare("UPDATE tenants SET logo_path = NULL WHERE id = ?").run(tenantId);
+    }
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: "Erro ao remover logo.", code: "INTERNAL" });
   }
 });
 

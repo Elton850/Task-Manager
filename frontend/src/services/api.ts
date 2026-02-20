@@ -263,4 +263,9 @@ export const tenantApi = {
     post<{ tenant: Tenant; accessUrl: string }>("/tenants", data),
   toggleActive: (id: string) =>
     patch<{ ok: boolean }>(`/tenants/${id}/toggle-active`),
+  /** Upload logo da empresa (Admin Mestre). body: { fileName, mimeType, contentBase64 } */
+  uploadLogo: (tenantId: string, body: { fileName: string; mimeType: string; contentBase64: string }) =>
+    post<{ ok: boolean }>(`/tenants/${tenantId}/logo`, body),
+  /** Remove logo da empresa (Admin Mestre). */
+  removeLogo: (tenantId: string) => del<{ ok: boolean }>(`/tenants/${tenantId}/logo`),
 };

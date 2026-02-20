@@ -130,5 +130,15 @@ try {
   // ignorar se já existir
 }
 
+// Migração: coluna logo_path em tenants (logo por empresa)
+try {
+  const cols = db.prepare("PRAGMA table_info(tenants)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "logo_path")) {
+    db.exec("ALTER TABLE tenants ADD COLUMN logo_path TEXT");
+  }
+} catch {
+  // ignorar se já existir ou falha
+}
+
 export default db;
 export { SYSTEM_TENANT_ID };

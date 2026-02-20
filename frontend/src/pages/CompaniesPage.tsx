@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { Building2, Plus, RefreshCw, CheckCircle, XCircle } from "lucide-react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { Building2, Plus, RefreshCw, CheckCircle, XCircle, ImagePlus, Trash2 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
@@ -8,12 +8,29 @@ import { useToast } from "@/contexts/ToastContext";
 import { tenantApi } from "@/services/api";
 import type { TenantListItem } from "@/types";
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result || "");
+    };
+    reader.onerror = () => reject(new Error("Falha ao ler arquivo"));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function CompaniesPage() {
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [tenants, setTenants] = useState<TenantListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ slug: "", name: "" });
+  const [logoUploadingId, setLogoUploadingId] = useState<string | null>(null);
+  const [logoRemovingId, setLogoRemovingId] = useState<string | null>(null);
+  const [logoTargetId, setLogoTargetId] = useState<string | null>(null);
+  const [logoVersion, setLogoVersion] = useState<Record<string, number>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -48,6 +65,49 @@ export default function CompaniesPage() {
       toast(err instanceof Error ? err.message : "Erro ao criar empresa", "error");
     } finally {
       setCreating(false);
+    }
+  };
+
+  const triggerLogoUpload = (tenantId: string) => {
+    setLogoTargetId(tenantId);
+    fileInputRef.current?.click();
+  };
+
+  const handleLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const tenantId = logoTargetId;
+    e.target.value = "";
+    setLogoTargetId(null);
+    if (!file || !tenantId) return;
+    const mime = file.type || "image/jpeg";
+    if (!/^image\/(jpeg|png|gif|webp)$/i.test(mime)) {
+      toast("Use uma imagem JPEG, PNG, GIF ou WebP.", "error");
+      return;
+    }
+    setLogoUploadingId(tenantId);
+    try {
+      const contentBase64 = await fileToBase64(file);
+      await tenantApi.uploadLogo(tenantId, { fileName: file.name, mimeType: mime, contentBase64 });
+      setLogoVersion((v) => ({ ...v, [tenantId]: Date.now() }));
+      toast("Logo atualizada.", "success");
+      await load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Erro ao enviar logo", "error");
+    } finally {
+      setLogoUploadingId(null);
+    }
+  };
+
+  const handleRemoveLogo = async (tenantId: string) => {
+    setLogoRemovingId(tenantId);
+    try {
+      await tenantApi.removeLogo(tenantId);
+      toast("Logo removida.", "success");
+      await load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Erro ao remover logo", "error");
+    } finally {
+      setLogoRemovingId(null);
     }
   };
 
@@ -104,9 +164,17 @@ export default function CompaniesPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              className="hidden"
+              onChange={handleLogoFileChange}
+            />
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-100">
                 <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase w-24">Logo</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">Nome</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">Identificador</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">Status</th>
@@ -115,6 +183,48 @@ export default function CompaniesPage() {
               <tbody className="divide-y divide-slate-200 bg-white">
                 {tenants.map((t) => (
                   <tr key={t.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {t.hasLogo ? (
+                          <img
+                            key={logoVersion[t.id]}
+                            src={`/api/tenants/logo/${t.slug}${logoVersion[t.id] ? `?v=${logoVersion[t.id]}` : ""}`}
+                            alt=""
+                            className="h-10 w-10 rounded-lg border border-slate-200 object-cover bg-white"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded-lg border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center">
+                            <Building2 size={18} className="text-slate-400" />
+                          </div>
+                        )}
+                        <div className="flex flex-col gap-0.5">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs h-7"
+                            onClick={() => triggerLogoUpload(t.id)}
+                            disabled={!!logoUploadingId}
+                            loading={logoUploadingId === t.id}
+                            icon={<ImagePlus size={12} />}
+                          >
+                            {t.hasLogo ? "Trocar" : "Enviar"}
+                          </Button>
+                          {t.hasLogo && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-xs h-7 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                              onClick={() => handleRemoveLogo(t.id)}
+                              disabled={!!logoRemovingId}
+                              loading={logoRemovingId === t.id}
+                              icon={<Trash2 size={12} />}
+                            >
+                              Remover
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-sm font-medium text-slate-800">{t.name}</td>
                     <td className="px-4 py-3 text-sm text-slate-600 font-mono">@{t.slug}</td>
                     <td className="px-4 py-3">

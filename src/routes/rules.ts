@@ -97,7 +97,11 @@ router.put("/for-tenant", (req: Request, res: Response): void => {
     }
 
     const updated = db.prepare("SELECT * FROM rules WHERE tenant_id = ? AND area = ?")
-      .get(tenantId, area) as RuleDbRow;
+      .get(tenantId, area) as RuleDbRow | undefined;
+    if (!updated) {
+      res.status(500).json({ error: "Erro ao salvar regra.", code: "INTERNAL" });
+      return;
+    }
     res.json({ rule: rowToRule(updated) });
   } catch {
     res.status(500).json({ error: "Erro ao salvar regra.", code: "INTERNAL" });
@@ -198,8 +202,11 @@ router.put("/", (req: Request, res: Response): void => {
     }
 
     const updated = db.prepare("SELECT * FROM rules WHERE tenant_id = ? AND area = ?")
-      .get(tenantId, area) as RuleDbRow;
-
+      .get(tenantId, area) as RuleDbRow | undefined;
+    if (!updated) {
+      res.status(500).json({ error: "Erro ao salvar regra.", code: "INTERNAL" });
+      return;
+    }
     res.json({ rule: rowToRule(updated) });
   } catch {
     res.status(500).json({ error: "Erro ao salvar regra.", code: "INTERNAL" });

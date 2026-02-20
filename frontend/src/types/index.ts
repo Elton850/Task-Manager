@@ -9,6 +9,8 @@ export interface Tenant {
 export interface TenantListItem extends Tenant {
   active: number;
   created_at: string;
+  /** Indica se a empresa tem logo cadastrada (admin mestre). */
+  hasLogo?: boolean;
 }
 
 export interface AuthUser {

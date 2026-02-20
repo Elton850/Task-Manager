@@ -59,7 +59,7 @@ export default function CalendarPage() {
         const allowed = ruleRes.rule?.allowedRecorrencias || [];
         const canCreate = allowed.length > 0;
         setCanCreateTask(canCreate);
-        setCreateBlockedReason(canCreate ? "" : "Sua area nao possui recorrencias permitidas para criacao de tarefas.");
+        setCreateBlockedReason(canCreate ? "" : "Sua área não possui recorrências permitidas para criação de tarefas.");
       } else {
         const [tasksRes, usersRes, lookupsRes] = await Promise.all(basePromises);
         setAllTasks(tasksRes.tasks);

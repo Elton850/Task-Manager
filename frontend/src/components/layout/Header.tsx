@@ -1,8 +1,8 @@
 import React from "react";
 import { useLocation } from "react-router-dom";
 import { Menu } from "lucide-react";
-import logo from "@/assets/logo.jpeg";
 import { useAuth } from "@/contexts/AuthContext";
+import TenantLogo from "@/components/ui/TenantLogo";
 
 interface HeaderProps {
   onMenuToggle: () => void;
@@ -37,9 +37,7 @@ export default function Header({ onMenuToggle }: HeaderProps) {
         </button>
         {!isMasterAdmin && (
           <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
-            <div className="h-8 w-8 rounded-lg bg-white border border-slate-200 shadow-sm overflow-hidden flex items-center justify-center p-0.5">
-              <img src={logo} alt="Task Manager" className="w-full h-full object-contain" />
-            </div>
+            <TenantLogo tenantSlug={tenant?.slug} alt="Task Manager" size="h-8 w-8" />
           </div>
         )}
         <h1 className="text-base font-semibold text-brand-900 truncate">{title}</h1>

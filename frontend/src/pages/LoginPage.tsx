@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useBasePath } from "@/contexts/BasePathContext";
 import { authApi, tenantApi } from "@/services/api";
-import logo from "@/assets/logo.jpeg";
+import TenantLogo from "@/components/ui/TenantLogo";
 
 type Mode = "login" | "reset";
 
@@ -100,9 +100,12 @@ export default function LoginPage() {
         {!isAdminLogin && (
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center mb-4">
-              <div className="h-16 w-16 rounded-xl bg-white border border-slate-200 shadow-sm overflow-hidden flex items-center justify-center p-1">
-                <img src={logo} alt="Task Manager" className="w-full h-full object-contain" />
-              </div>
+              <TenantLogo
+                tenantSlug={basePath ? basePath.replace(/^\//, "") : null}
+                alt="Task Manager"
+                size="h-16 w-16"
+                className="rounded-xl shadow-sm"
+              />
             </div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Task Manager</h1>
             <p className="text-sm text-slate-500 mt-1 truncate max-w-[18rem] mx-auto">
