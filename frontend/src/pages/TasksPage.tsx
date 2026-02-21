@@ -36,6 +36,10 @@ export default function TasksPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<Task | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [completeTarget, setCompleteTarget] = useState<Task | null>(null);
+  const [completing, setCompleting] = useState(false);
+  const [duplicateTarget, setDuplicateTarget] = useState<Task | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
 
   const [canCreateTask, setCanCreateTask] = useState(true);
   const [createBlockedReason, setCreateBlockedReason] = useState("");
@@ -135,13 +139,18 @@ export default function TasksPage() {
     }
   };
 
-  const handleDuplicate = async (task: Task) => {
+  const handleDuplicate = async () => {
+    if (!duplicateTarget) return;
+    setDuplicating(true);
     try {
-      const { task: dup } = await tasksApi.duplicate(task.id);
+      const { task: dup } = await tasksApi.duplicate(duplicateTarget.id);
       setTasks(prev => [dup, ...prev]);
       toast("Tarefa duplicada", "success");
+      setDuplicateTarget(null);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Erro ao duplicar", "error");
+    } finally {
+      setDuplicating(false);
     }
   };
 
@@ -150,13 +159,18 @@ export default function TasksPage() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
 
-  const handleMarkComplete = async (task: Task) => {
+  const handleMarkComplete = async () => {
+    if (!completeTarget) return;
+    setCompleting(true);
     try {
-      const { task: updated } = await tasksApi.update(task.id, { realizado: todayYmd() });
+      const { task: updated } = await tasksApi.update(completeTarget.id, { realizado: todayYmd() });
       setTasks(prev => prev.map(t => (t.id === updated.id ? updated : t)));
       toast("Tarefa marcada como concluída", "success");
+      setCompleteTarget(null);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Erro ao marcar como concluída", "error");
+    } finally {
+      setCompleting(false);
     }
   };
 
@@ -252,8 +266,8 @@ export default function TasksPage() {
             setModalOpen(true);
           }}
           onDelete={task => setDeleteTarget(task)}
-          onDuplicate={handleDuplicate}
-          onMarkComplete={handleMarkComplete}
+          onDuplicate={task => setDuplicateTarget(task)}
+          onMarkComplete={task => setCompleteTarget(task)}
         />
       </Card>
 
@@ -283,6 +297,28 @@ export default function TasksPage() {
         loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={!!completeTarget}
+        title="Marcar como concluída"
+        message={completeTarget ? `Deseja marcar a tarefa "${completeTarget.atividade}" como concluída? A data de realização será definida como hoje.` : ""}
+        confirmLabel="Concluir"
+        variant="primary"
+        loading={completing}
+        onConfirm={handleMarkComplete}
+        onCancel={() => setCompleteTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={!!duplicateTarget}
+        title="Duplicar tarefa"
+        message={duplicateTarget ? `Deseja duplicar a tarefa "${duplicateTarget.atividade}"? Uma nova tarefa será criada com os mesmos dados (sem data de conclusão).` : ""}
+        confirmLabel="Duplicar"
+        variant="primary"
+        loading={duplicating}
+        onConfirm={handleDuplicate}
+        onCancel={() => setDuplicateTarget(null)}
       />
     </div>
   );

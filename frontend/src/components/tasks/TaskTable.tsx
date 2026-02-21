@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Edit2, Trash2, Copy, ChevronUp, ChevronDown, Paperclip, CheckCircle } from "lucide-react";
+import { Edit2, Trash2, Copy, ChevronUp, ChevronDown, Paperclip, CheckCircle, Info } from "lucide-react";
 import Badge, { getStatusVariant } from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
@@ -57,10 +57,12 @@ function TaskTableInner({ tasks, loading, onEdit, onDelete, onDuplicate, onMarkC
   const ThSortable = ({ field, label, className = "" }: { field: SortField; label: string; className?: string }) => (
     <th
       onClick={() => handleSort(field)}
-      className={`px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider cursor-pointer hover:text-slate-900 select-none ${className}`}
+      className={`px-4 py-3.5 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:text-slate-900 hover:bg-slate-100/80 transition-colors select-none focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:ring-inset rounded-t ${className}`}
     >
-      {label}
-      <SortIcon field={field} />
+      <span className="inline-flex items-center">
+        {label}
+        <SortIcon field={field} />
+      </span>
     </th>
   );
 
@@ -74,12 +76,12 @@ function TaskTableInner({ tasks, loading, onEdit, onDelete, onDuplicate, onMarkC
 
   if (!sorted.length) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-slate-500">
-        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
-          <span className="text-2xl">📋</span>
+      <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4 text-3xl">
+          📋
         </div>
-        <p className="text-sm font-medium text-slate-700">Nenhuma tarefa encontrada</p>
-        <p className="text-xs mt-1">Ajuste os filtros ou crie uma nova tarefa</p>
+        <p className="text-base font-semibold text-slate-700">Nenhuma tarefa encontrada</p>
+        <p className="text-sm text-slate-500 mt-1 max-w-xs">Ajuste os filtros ou crie uma nova tarefa para começar.</p>
       </div>
     );
   }
@@ -102,115 +104,134 @@ function TaskTableInner({ tasks, loading, onEdit, onDelete, onDuplicate, onMarkC
   };
 
   return (
-    <div className="overflow-x-auto -mx-4 sm:mx-0 sm:rounded-xl border border-slate-200">
-      <table className="min-w-full divide-y divide-slate-200" role="table" aria-label="Lista de tarefas">
-        <thead className="bg-slate-100">
-          <tr>
-            <ThSortable field="competenciaYm" label="Competência" />
-            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Atividade</th>
-            <ThSortable field="recorrencia" label="Recorrência" className="hidden md:table-cell" />
-            <ThSortable field="area" label="Área" className="hidden lg:table-cell" />
-            <ThSortable field="responsavelNome" label="Responsável" className="hidden sm:table-cell" />
-            <ThSortable field="prazo" label="Prazo" className="hidden md:table-cell" />
-            <ThSortable field="status" label="Status" />
-            <th className="px-4 py-3 text-right text-xs font-semibold text-slate-700 uppercase tracking-wider">
+    <div className="overflow-x-auto -mx-4 sm:mx-0 rounded-xl border border-slate-200/80 bg-white shadow-sm">
+      <table className="min-w-full" role="table" aria-label="Lista de tarefas">
+        <thead>
+          <tr className="border-b border-slate-200 bg-slate-50/90">
+            <ThSortable field="competenciaYm" label="Competência" className="w-0 whitespace-nowrap pl-5 pr-3" />
+            <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[200px] max-w-[320px]">
+              Atividade
+            </th>
+            <ThSortable field="recorrencia" label="Recorrência" className="hidden md:table-cell w-0 whitespace-nowrap" />
+            <ThSortable field="area" label="Área" className="hidden lg:table-cell w-0 whitespace-nowrap" />
+            <ThSortable field="responsavelNome" label="Responsável" className="hidden sm:table-cell w-0 whitespace-nowrap" />
+            <ThSortable field="prazo" label="Prazo" className="hidden md:table-cell w-0 whitespace-nowrap" />
+            <ThSortable field="status" label="Status" className="w-0 whitespace-nowrap text-center" />
+            <th className="px-4 py-3.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-0 whitespace-nowrap pr-5">
               <span className="sr-only">Ações</span>
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-200 bg-white">
+        <tbody className="divide-y divide-slate-100">
           {sorted.map(task => (
-            <tr key={task.id} className="hover:bg-slate-50 transition-colors">
-              <td className="px-4 py-3 text-sm text-slate-700 whitespace-nowrap font-mono">{task.competenciaYm}</td>
-              <td className="px-4 py-3 text-sm text-slate-800 max-w-xs">
-                <div className="truncate" title={task.atividade}>
-                  {task.atividade}
-                </div>
-                {task.observacoes && (
-                  <div className="text-xs text-slate-600 truncate mt-0.5" title={task.observacoes}>
-                    {task.observacoes}
+            <tr
+              key={task.id}
+              className="group bg-white hover:bg-slate-50/70 transition-colors duration-150 align-middle focus-within:bg-slate-50/70"
+            >
+              <td className="pl-5 pr-3 py-4 text-sm text-slate-600 whitespace-nowrap font-mono tabular-nums align-middle border-l-4 border-transparent group-hover:border-slate-200 transition-colors">
+                {task.competenciaYm}
+              </td>
+              <td className="px-4 py-4 align-middle">
+                <div className="min-w-0 flex flex-col gap-1.5">
+                  <div className="flex items-start justify-between gap-3 min-w-0">
+                    <p className="text-sm font-medium text-slate-800 truncate flex-1 min-w-0 leading-snug" title={task.atividade}>
+                      {task.atividade}
+                    </p>
+                    {!!task.evidences?.length && (
+                      <span className="shrink-0 inline-flex items-center gap-1 text-xs text-brand-700 bg-brand-50 border border-brand-100 rounded-full px-2 py-0.5 font-medium" title={`${task.evidences.length} anexo(s)`}>
+                        <Paperclip size={12} strokeWidth={2} />
+                        {task.evidences.length}
+                      </span>
+                    )}
                   </div>
-                )}
-                <div className="flex items-center gap-2 mt-1">
-                  {!!task.evidences?.length && (
-                    <span className="inline-flex items-center gap-1 text-xs text-brand-800 bg-brand-50 border border-brand-200 rounded-full px-2 py-0.5">
-                      <Paperclip size={11} />
-                      {task.evidences.length}
+                  {task.observacoes && (
+                    <p className="text-xs text-slate-500 truncate leading-relaxed" title={task.observacoes}>
+                      <span className="text-slate-400 font-medium">Obs.:</span> {task.observacoes}
+                    </p>
+                  )}
+                  <div className="sm:hidden mt-0.5">
+                    <span className="text-xs text-slate-600">{task.responsavelNome}</span>
+                  </div>
+                </div>
+              </td>
+              <td className="px-4 py-4 text-sm text-slate-600 whitespace-nowrap hidden md:table-cell align-middle">{task.recorrencia}</td>
+              <td className="px-4 py-4 text-sm text-slate-600 whitespace-nowrap hidden lg:table-cell align-middle">{task.area}</td>
+              <td className="px-4 py-4 text-sm text-slate-700 font-medium whitespace-nowrap hidden sm:table-cell align-middle">{task.responsavelNome}</td>
+              <td className="px-4 py-4 text-sm whitespace-nowrap hidden md:table-cell align-middle">
+                <div className="flex items-center gap-1.5">
+                  {task.prazo ? (
+                    <span
+                      className={`inline-flex items-center gap-1.5 ${task.status === "Em Atraso" ? "text-rose-600 font-semibold" : "text-slate-700"}`}
+                      title={task.prazoModifiedByName || task.prazoModifiedBy ? `Prazo alterado por: ${task.prazoModifiedByName || task.prazoModifiedBy}` : undefined}
+                    >
+                      {task.status === "Em Atraso" && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" aria-hidden />}
+                      {new Date(task.prazo + "T00:00:00").toLocaleDateString("pt-BR")}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                  {(task.prazoModifiedByName || task.prazoModifiedBy) && (
+                    <span title={`Prazo modificado por: ${task.prazoModifiedByName || task.prazoModifiedBy}`} className="text-amber-600 cursor-help inline-flex">
+                      <Info size={14} />
                     </span>
                   )}
-                  <div className="flex flex-wrap gap-1 sm:hidden">
-                    <span className="text-xs text-slate-700 font-medium">{task.responsavelNome}</span>
-                  </div>
                 </div>
               </td>
-              <td className="px-4 py-3 text-sm text-slate-700 whitespace-nowrap hidden md:table-cell">{task.recorrencia}</td>
-              <td className="px-4 py-3 text-sm text-slate-700 whitespace-nowrap hidden lg:table-cell">{task.area}</td>
-              <td className="px-4 py-3 text-sm text-slate-800 font-medium whitespace-nowrap hidden sm:table-cell">{task.responsavelNome}</td>
-              <td className="px-4 py-3 text-sm whitespace-nowrap hidden md:table-cell">
-                {task.prazo ? (
-                  <span className={task.status === "Em Atraso" ? "text-rose-600 font-medium" : "text-slate-700"}>
-                    {new Date(task.prazo + "T00:00:00").toLocaleDateString("pt-BR")}
-                  </span>
-                ) : (
-                  <span className="text-slate-400">—</span>
-                )}
-                {(task.prazoModifiedByName || task.prazoModifiedBy) && (
-                  <div className="text-xs text-amber-700 mt-0.5" title="Prazo alterado para auditoria">
-                    Prazo modificado por {task.prazoModifiedByName || task.prazoModifiedBy}
-                  </div>
-                )}
+              <td className="px-4 py-4 whitespace-nowrap align-middle">
+                <div className="flex flex-col items-center justify-center gap-1 w-full">
+                  <Badge variant={getStatusVariant(task.status)} size="sm">
+                    {task.status}
+                  </Badge>
+                  {task.realizado && (
+                    <div
+                      className="text-xs text-slate-500 flex items-center justify-center gap-1 tabular-nums"
+                      title={task.realizadoPorNome || task.realizadoPor ? `Concluído por: ${task.realizadoPorNome || task.realizadoPor}` : undefined}
+                    >
+                      <span>{new Date(task.realizado + "T00:00:00").toLocaleDateString("pt-BR")}</span>
+                      {(task.realizadoPorNome || task.realizadoPor) && (
+                        <Info size={12} className="text-amber-600 shrink-0 cursor-help" title={`Concluído por: ${task.realizadoPorNome || task.realizadoPor}`} />
+                      )}
+                    </div>
+                  )}
+                </div>
               </td>
-              <td className="px-4 py-3 whitespace-nowrap">
-                <div className="flex items-center gap-2">
+              <td className="px-4 py-4 text-right whitespace-nowrap align-middle pr-5">
+                <div className="flex items-center justify-end gap-0.5">
                   {canMarkComplete(task) && (
                     <button
                       type="button"
                       onClick={() => handleMarkComplete(task)}
                       disabled={!!markingId}
                       title="Marcar como concluída"
-                      className="p-1 rounded-md text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                      className="inline-flex items-center justify-center p-2 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:ring-offset-1"
+                      aria-label="Marcar como concluída"
                     >
                       {markingId === task.id ? (
                         <span className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin block" />
                       ) : (
-                        <CheckCircle size={16} />
+                        <CheckCircle size={16} strokeWidth={2} />
                       )}
                     </button>
                   )}
-                  <Badge variant={getStatusVariant(task.status)} size="sm">
-                    {task.status}
-                  </Badge>
-                </div>
-                {task.realizado && (
-                  <div className="text-xs text-slate-600 mt-0.5">
-                    {new Date(task.realizado + "T00:00:00").toLocaleDateString("pt-BR")}
-                  </div>
-                )}
-                {(task.realizadoPorNome || task.realizadoPor) && (
-                  <div className="text-xs text-amber-700 mt-0.5" title="Conclusão registrada para auditoria">
-                    Concluído por {task.realizadoPorNome || task.realizadoPor}
-                  </div>
-                )}
-              </td>
-              <td className="px-4 py-3 text-right whitespace-nowrap">
-                <div className="flex items-center justify-end gap-1">
                   {canDuplicate && onDuplicate && (
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => onDuplicate(task)} 
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onDuplicate(task)}
                       aria-label={`Duplicar tarefa: ${task.atividade}`}
                       title="Duplicar"
+                      className="opacity-70 hover:opacity-100"
                     >
                       <Copy size={14} />
                     </Button>
                   )}
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => onEdit(task)} 
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onEdit(task)}
                     aria-label={`Editar tarefa: ${task.atividade}`}
                     title="Editar"
+                    className="opacity-70 hover:opacity-100"
                   >
                     <Edit2 size={14} />
                   </Button>
@@ -221,7 +242,7 @@ function TaskTableInner({ tasks, loading, onEdit, onDelete, onDuplicate, onMarkC
                       onClick={() => onDelete(task)}
                       aria-label={`Excluir tarefa: ${task.atividade}`}
                       title="Excluir"
-                      className="hover:text-rose-600 hover:bg-rose-50"
+                      className="opacity-70 hover:opacity-100 hover:text-rose-600 hover:bg-rose-50"
                     >
                       <Trash2 size={14} />
                     </Button>

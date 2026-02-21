@@ -543,6 +543,11 @@ router.post("/:id/evidences", (req: Request, res: Response): void => {
       res.status(403).json({ error: "Sem permissão para anexar evidências.", code: "FORBIDDEN" });
       return;
     }
+    const concluida = !!(task.realizado || task.status === "Concluído" || task.status === "Concluído em Atraso");
+    if (concluida) {
+      res.status(400).json({ error: "Não é possível anexar evidências em atividade já concluída.", code: "TASK_CONCLUDED" });
+      return;
+    }
 
     const fileName = mustString(fileNameRaw, "Nome do arquivo");
     const mimeType = (optStr(mimeTypeRaw) || "application/octet-stream").toLowerCase().split(";")[0].trim();

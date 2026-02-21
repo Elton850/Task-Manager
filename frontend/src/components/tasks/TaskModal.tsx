@@ -64,6 +64,7 @@ export default function TaskModal({
   const { toast } = useToast();
   const isEdit = !!task;
   const isUserOnlyObservacoes = user?.role === "USER" && isEdit;
+  const taskConcluida = task?.status === "Concluído" || task?.status === "Concluído em Atraso";
   const evidenceInputRef = useRef<HTMLInputElement | null>(null);
 
   const [form, setForm] = useState({
@@ -82,6 +83,11 @@ export default function TaskModal({
   const [uploadingEvidence, setUploadingEvidence] = useState(false);
   const [deleteEvidenceTarget, setDeleteEvidenceTarget] = useState<TaskEvidence | null>(null);
   const [deletingEvidence, setDeletingEvidence] = useState(false);
+  const [pendingCompletePayload, setPendingCompletePayload] = useState<Partial<Task> | null>(null);
+
+  useEffect(() => {
+    if (!open) setPendingCompletePayload(null);
+  }, [open]);
 
   useEffect(() => {
     if (open) {
@@ -148,8 +154,24 @@ export default function TaskModal({
           responsavelEmail: user?.role === "USER" ? user.email : form.responsavelEmail,
         };
 
-    const saved = await onSave(payload);
+    const vaiConcluir = isEdit && !taskConcluida && !isUserOnlyObservacoes && !!String(payload.realizado ?? "").trim();
+    if (vaiConcluir) {
+      setPendingCompletePayload(payload);
+      return;
+    }
 
+    const saved = await onSave(payload);
+    if (saved?.evidences) {
+      setEvidences(saved.evidences);
+      onTaskChange?.(saved);
+    }
+  };
+
+  const handleConfirmComplete = async () => {
+    if (!pendingCompletePayload) return;
+    const payload = pendingCompletePayload;
+    setPendingCompletePayload(null);
+    const saved = await onSave(payload);
     if (saved?.evidences) {
       setEvidences(saved.evidences);
       onTaskChange?.(saved);
@@ -354,7 +376,10 @@ export default function TaskModal({
 
           {isEdit && (
             <>
-              {!isUserOnlyObservacoes && (
+              {taskConcluida && (
+                <p className="text-xs text-amber-700">Atividade concluída. Não é possível anexar novas evidências.</p>
+              )}
+              {!taskConcluida && (
                 <>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <input
@@ -480,6 +505,17 @@ export default function TaskModal({
         loading={deletingEvidence}
         onConfirm={handleDeleteEvidence}
         onCancel={() => setDeleteEvidenceTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={!!pendingCompletePayload}
+        title="Marcar como concluída"
+        message="Deseja marcar esta tarefa como concluída? A data de realização será registrada."
+        confirmLabel="Concluir e salvar"
+        variant="primary"
+        loading={loading}
+        onConfirm={handleConfirmComplete}
+        onCancel={() => setPendingCompletePayload(null)}
       />
     </Modal>
   );
