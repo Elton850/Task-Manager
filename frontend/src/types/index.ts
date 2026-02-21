@@ -65,6 +65,14 @@ export interface Task {
   createdBy: string;
   updatedAt: string;
   updatedBy: string;
+  /** Email de quem alterou o prazo (auditoria). */
+  prazoModifiedBy?: string;
+  /** Nome para exibição: prazo modificado por. */
+  prazoModifiedByName?: string;
+  /** Email de quem concluiu / definiu a data de conclusão (auditoria). */
+  realizadoPor?: string;
+  /** Nome para exibição: concluído por. */
+  realizadoPorNome?: string;
   evidences?: TaskEvidence[];
 }
 

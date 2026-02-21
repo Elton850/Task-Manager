@@ -29,6 +29,8 @@ interface TaskDbRow {
   updated_by: string;
   deleted_at: string | null;
   deleted_by: string | null;
+  prazo_modified_by?: string | null;
+  realizado_por?: string | null;
 }
 
 interface EvidenceDbRow {
@@ -56,7 +58,24 @@ function toEvidence(row: EvidenceDbRow, taskId: string) {
   };
 }
 
-function rowToTask(row: TaskDbRow, evidences: EvidenceDbRow[] = []) {
+function getNamesForEmails(tenantId: string, emails: string[]): Record<string, string> {
+  const unique = [...new Set(emails)].filter(Boolean);
+  const map: Record<string, string> = {};
+  for (const email of unique) {
+    const u = db.prepare("SELECT nome FROM users WHERE tenant_id = ? AND email = ?")
+      .get(tenantId, email) as { nome: string } | undefined;
+    if (u) map[email] = u.nome;
+  }
+  return map;
+}
+
+function rowToTask(
+  row: TaskDbRow,
+  evidences: EvidenceDbRow[] = [],
+  emailToName?: Record<string, string>
+) {
+  const prazoModifiedBy = row.prazo_modified_by ?? null;
+  const realizadoPor = row.realizado_por ?? null;
   return {
     id: row.id,
     tenantId: row.tenant_id,
@@ -75,6 +94,10 @@ function rowToTask(row: TaskDbRow, evidences: EvidenceDbRow[] = []) {
     createdBy: row.created_by,
     updatedAt: row.updated_at,
     updatedBy: row.updated_by,
+    prazoModifiedBy: prazoModifiedBy || undefined,
+    prazoModifiedByName: (prazoModifiedBy && emailToName?.[prazoModifiedBy]) || undefined,
+    realizadoPor: realizadoPor || undefined,
+    realizadoPorNome: (realizadoPor && emailToName?.[realizadoPor]) || undefined,
     evidences: evidences.map(e => toEvidence(e, row.id)),
   };
 }
@@ -157,7 +180,14 @@ router.get("/", (req: Request, res: Response): void => {
       }
     }
 
-    res.json({ tasks: rows.map(row => rowToTask(row, evidencesByTask.get(row.id) || [])) });
+    const auditEmails: string[] = [];
+    for (const row of rows) {
+      if (row.prazo_modified_by) auditEmails.push(row.prazo_modified_by);
+      if (row.realizado_por) auditEmails.push(row.realizado_por);
+    }
+    const emailToName = getNamesForEmails(req.user!.tenantId, auditEmails);
+
+    res.json({ tasks: rows.map(row => rowToTask(row, evidencesByTask.get(row.id) || [], emailToName)) });
   } catch {
     res.status(500).json({ error: "Erro ao buscar tarefas.", code: "INTERNAL" });
   }
@@ -238,12 +268,13 @@ router.post("/", (req: Request, res: Response): void => {
     const status = calcStatus(prazo, realizado);
     const id = uuidv4();
     const now = nowIso();
+    const realizadoPor = realizado ? user.email : null;
 
     db.prepare(`
       INSERT INTO tasks (id, tenant_id, competencia_ym, recorrencia, tipo, atividade,
         responsavel_email, responsavel_nome, area, prazo, realizado, status, observacoes,
-        created_at, created_by, updated_at, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_at, created_by, updated_at, updated_by, prazo_modified_by, realizado_por)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, tenantId,
       mustString(body.competenciaYm, "Competência"),
@@ -253,11 +284,13 @@ router.post("/", (req: Request, res: Response): void => {
       responsavelEmail, responsavelNome, area,
       prazo || null, realizado || null,
       status, observacoes || null,
-      now, user.email, now, user.email
+      now, user.email, now, user.email,
+      null, realizadoPor
     );
 
     const created = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id) as TaskDbRow;
-    res.status(201).json({ task: rowToTask(created, []) });
+    const emailToName = getNamesForEmails(tenantId, [created.prazo_modified_by, created.realizado_por].filter(Boolean) as string[]);
+    res.status(201).json({ task: rowToTask(created, [], emailToName) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro ao criar tarefa.";
     res.status(400).json({ error: msg, code: "VALIDATION" });
@@ -328,26 +361,33 @@ router.put("/:id", (req: Request, res: Response): void => {
 
     const status = calcStatus(prazo, realizado);
     const now = nowIso();
+    const prazoChanged = (prazo || null) !== (task.prazo || null);
+    const prazoModifiedBy = prazoChanged ? user.email : (task.prazo_modified_by ?? null);
+    const realizadoPor = realizado ? user.email : null;
 
     db.prepare(`
       UPDATE tasks SET
         competencia_ym = ?, recorrencia = ?, tipo = ?, atividade = ?,
         responsavel_email = ?, responsavel_nome = ?, area = ?,
         prazo = ?, realizado = ?, status = ?, observacoes = ?,
-        updated_at = ?, updated_by = ?
+        updated_at = ?, updated_by = ?,
+        prazo_modified_by = ?, realizado_por = ?
       WHERE id = ? AND tenant_id = ?
     `).run(
       competenciaYm, recorrencia, tipo, atividade,
       responsavelEmail, responsavelNome, area,
       prazo, realizado, status, observacoes,
       now, user.email,
+      prazoModifiedBy, realizadoPor,
       id, tenantId
     );
 
     const updated = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id) as TaskDbRow;
     const evidences = db.prepare("SELECT * FROM task_evidences WHERE task_id = ? ORDER BY uploaded_at DESC")
       .all(id) as EvidenceDbRow[];
-    res.json({ task: rowToTask(updated, evidences) });
+    const auditEmails = [updated.prazo_modified_by, updated.realizado_por].filter(Boolean) as string[];
+    const emailToName = getNamesForEmails(tenantId, auditEmails);
+    res.json({ task: rowToTask(updated, evidences, emailToName) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro ao atualizar tarefa.";
     res.status(400).json({ error: msg, code: "VALIDATION" });
@@ -416,8 +456,8 @@ router.post("/:id/duplicate", (req: Request, res: Response): void => {
     db.prepare(`
       INSERT INTO tasks (id, tenant_id, competencia_ym, recorrencia, tipo, atividade,
         responsavel_email, responsavel_nome, area, prazo, realizado, status, observacoes,
-        created_at, created_by, updated_at, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'Em Andamento', ?, ?, ?, ?, ?)
+        created_at, created_by, updated_at, updated_by, prazo_modified_by, realizado_por)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'Em Andamento', ?, ?, ?, ?, ?, NULL, NULL)
     `).run(
       newId, tenantId, task.competencia_ym, task.recorrencia, task.tipo,
       task.atividade, task.responsavel_email, task.responsavel_nome, task.area,
@@ -425,7 +465,7 @@ router.post("/:id/duplicate", (req: Request, res: Response): void => {
     );
 
     const created = db.prepare("SELECT * FROM tasks WHERE id = ?").get(newId) as TaskDbRow;
-    res.status(201).json({ task: rowToTask(created, []) });
+    res.status(201).json({ task: rowToTask(created, [], {}) });
   } catch {
     res.status(500).json({ error: "Erro ao duplicar tarefa.", code: "INTERNAL" });
   }
@@ -553,10 +593,12 @@ router.post("/:id/evidences", (req: Request, res: Response): void => {
     const evidences = db.prepare("SELECT * FROM task_evidences WHERE task_id = ? ORDER BY uploaded_at DESC")
       .all(taskId) as EvidenceDbRow[];
     const updatedTask = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId) as TaskDbRow;
+    const auditEmails = [updatedTask.prazo_modified_by, updatedTask.realizado_por].filter(Boolean) as string[];
+    const emailToName = getNamesForEmails(tenantId, auditEmails);
 
     res.status(201).json({
       evidence: toEvidence(evidence, taskId),
-      task: rowToTask(updatedTask, evidences),
+      task: rowToTask(updatedTask, evidences, emailToName),
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro ao anexar evidência.";
@@ -659,8 +701,10 @@ router.delete("/:id/evidences/:evidenceId", (req: Request, res: Response): void 
     const evidences = db.prepare("SELECT * FROM task_evidences WHERE task_id = ? ORDER BY uploaded_at DESC")
       .all(taskId) as EvidenceDbRow[];
     const updatedTask = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId) as TaskDbRow;
+    const auditEmails = [updatedTask.prazo_modified_by, updatedTask.realizado_por].filter(Boolean) as string[];
+    const emailToName = getNamesForEmails(tenantId, auditEmails);
 
-    res.json({ ok: true, task: rowToTask(updatedTask, evidences) });
+    res.json({ ok: true, task: rowToTask(updatedTask, evidences, emailToName) });
   } catch {
     res.status(500).json({ error: "Erro ao remover evidência.", code: "INTERNAL" });
   }

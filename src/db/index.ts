@@ -164,5 +164,18 @@ try {
   // ignorar
 }
 
+// Migração: auditoria de prazo e conclusão (quem modificou prazo / quem concluiu)
+try {
+  const taskCols = db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
+  if (!taskCols.some((c) => c.name === "prazo_modified_by")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN prazo_modified_by TEXT");
+  }
+  if (!taskCols.some((c) => c.name === "realizado_por")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN realizado_por TEXT");
+  }
+} catch {
+  // ignorar
+}
+
 export default db;
 export { SYSTEM_TENANT_ID };

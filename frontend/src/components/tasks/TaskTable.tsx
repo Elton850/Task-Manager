@@ -154,6 +154,11 @@ function TaskTableInner({ tasks, loading, onEdit, onDelete, onDuplicate, onMarkC
                 ) : (
                   <span className="text-slate-400">—</span>
                 )}
+                {(task.prazoModifiedByName || task.prazoModifiedBy) && (
+                  <div className="text-xs text-amber-700 mt-0.5" title="Prazo alterado para auditoria">
+                    Prazo modificado por {task.prazoModifiedByName || task.prazoModifiedBy}
+                  </div>
+                )}
               </td>
               <td className="px-4 py-3 whitespace-nowrap">
                 <div className="flex items-center gap-2">
@@ -179,6 +184,11 @@ function TaskTableInner({ tasks, loading, onEdit, onDelete, onDuplicate, onMarkC
                 {task.realizado && (
                   <div className="text-xs text-slate-600 mt-0.5">
                     {new Date(task.realizado + "T00:00:00").toLocaleDateString("pt-BR")}
+                  </div>
+                )}
+                {(task.realizadoPorNome || task.realizadoPor) && (
+                  <div className="text-xs text-amber-700 mt-0.5" title="Conclusão registrada para auditoria">
+                    Concluído por {task.realizadoPorNome || task.realizadoPor}
                   </div>
                 )}
               </td>
